@@ -3,12 +3,15 @@ package com.oy.oypicturebackend.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.oy.oypicturebackend.exception.BusinessException;
 import com.oy.oypicturebackend.exception.ErrorCode;
 import com.oy.oypicturebackend.exception.ThrowUtils;
+import com.oy.oypicturebackend.manager.CosManager;
 import com.oy.oypicturebackend.manager.FileManager;
 import com.oy.oypicturebackend.manager.upload.FilePictureUpload;
 import com.oy.oypicturebackend.manager.upload.PictureUploadTemplate;
@@ -32,6 +35,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.beans.BeanUtils;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 
@@ -61,6 +65,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
     private FilePictureUpload filePictureUpload;
     @Resource
     private UrlPictureUpload urlPictureUpload;
+    @Resource
+    private CosManager cosManager;
 
     /**
      * 上传图片
@@ -76,12 +82,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NO_AUTH_ERROR);
         //判断是新增还是删除，若DTO为null，则pictureId为null，是新增，若DTO不为null，则提取其中pictureId，表示可能是更新操作
         Long pictureId = null;
+        Picture oldPicture = null;
         if (pictureUploadRequestDTO != null) {
             pictureId = pictureUploadRequestDTO.getId();
         }
         //若id不为空，（尝试更新图片），根据这个pictureId去数据库中查询有没有这条记录，防止传入无效的id，防止更新不存在的图片
         if (pictureId != null) {
-            Picture oldPicture = this.getById(pictureId);//从数据库把这张图片查出来
+            oldPicture = this.getById(pictureId);//从数据库把这张图片查出来
             ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
 
             //仅当前这一张图片的作者或管理员可编辑
@@ -97,15 +104,17 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         if (inputSource instanceof String) {//如果输入源是Url ，就换成使用url上传图片的方式
             pictureUploadTemplate = urlPictureUpload;
         }
+        //调用模板的上传图片方法
         UploadPictureResult uploadPictureResult = pictureUploadTemplate.uploadPicture(inputSource, uploadPathPrefix);
 
         //将上传结果的图片信息转换成Picture实体类存入数据库
         Picture picture = new Picture();
         picture.setUrl(uploadPictureResult.getUrl());
+        picture.setThumbnailUrl(uploadPictureResult.getThumbnailUrl());//设置缩略图Url
         //支持将图片上传后得到的图片名改为自定义的图片名
         String picName = uploadPictureResult.getPicName();
-        if (pictureUploadRequestDTO != null && StrUtil.isNotBlank(pictureUploadRequestDTO.getPicName())){
-            picName=pictureUploadRequestDTO.getPicName();
+        if (pictureUploadRequestDTO != null && StrUtil.isNotBlank(pictureUploadRequestDTO.getPicName())) {
+            picName = pictureUploadRequestDTO.getPicName();
         }
         picture.setName(picName);
         picture.setPicSize(uploadPictureResult.getPicSize());//体积
@@ -125,6 +134,12 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
 
         boolean result = this.saveOrUpdate(picture);//这个方法内部会根据picture的id是否为空来决定执行新增还是修改
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "图片上传失败，数据库操作失败");
+
+        //若是更新图片，那么更新完数据库的图片信息后，把对象存储中旧的图片清楚
+        if (pictureId != null && oldPicture != null) {
+            this.clearPictureFile(oldPicture);
+        }
+
         return PictureVO.objToVo(picture);
     }
 
@@ -138,7 +153,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
     public QueryWrapper<Picture> getQueryWrapper(PictureQueryRequestDTO pictureQueryRequestDTO) {
         //初始化一个空的查询条件包装器，Picture是要查询的实体类
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
-        //如果前端查询请求DTO为null（即前端没传任何查询条件），直接返回空的查询条件
+        //如果前端查询请求DTO为null（即前端没传任何查询条件），直接返回空查询条件
         if (pictureQueryRequestDTO == null) {
             return queryWrapper;
         }
@@ -371,10 +386,10 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         String searchText = pictureUploadByBatchRequestDTO.getSearchText();
         Integer count = pictureUploadByBatchRequestDTO.getCount();
         ThrowUtils.throwIf(count > 30, ErrorCode.PARAMS_ERROR, "最多30条");
-        String namePrefix = pictureUploadByBatchRequestDTO.getNamePrefix();//图片名称前缀
-        if (StrUtil.isBlank(namePrefix)){
+        String namePrefix = pictureUploadByBatchRequestDTO.getNamePrefix();//前端展示的图片的名称前缀
+        if (StrUtil.isBlank(namePrefix)) {
             //若图片名称前缀为空，将图片名称前缀设置为搜索词
-            namePrefix=searchText;
+            namePrefix = searchText;
         }
 
         //用搜索词拼URL组装要抓取的地址
@@ -383,28 +398,38 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
 
         //抓取页面
         try {
-            //拉回HTML，失败就抛业务异常
+            //使用Jsoup抓取HTML页面并解析，失败就抛业务异常
             document = Jsoup.connect(fetchUrl).get();
         } catch (IOException e) {
             log.error("获取页面失败，", e);
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "获取页面失败");
         }
 
-        //定位结果区域，找到结果容器div，空则报错
+        //定位图片区域，找到结果容器div，空则报错
         Element div = document.getElementsByClass("dgControl").first();
         if (ObjUtil.isEmpty(div)) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "获取元素失败");
         }
 
         //选出图片节点
-        Elements imgElementList = div.select("img.mimg");
+        Elements imgElementList = div.select("a.iusc");
+        System.out.println(imgElementList);
 
         int uploadCount = 0;//定义一个变量用于记录上传成功的数量
 
-        //遍历元素，依次上传图片
+        //遍历图片节点，取出每张图片高清地址
         for (Element imgElement : imgElementList) {
-            //从每个img取src，空则跳过
-            String fileUrl = imgElement.attr("src");
+            String dataM = imgElement.attr("m");//获取图片节点中m属性的值，获取到的是JSON字符串
+            String fileUrl;
+
+            try {
+                JSONObject jsonObject = JSONUtil.parseObj(dataM);//将JSON字符串反序列化为对象
+                fileUrl = jsonObject.getStr("murl");//从反序列化后的JSONObject对象中获取键为murl的值，并赋值给fileUrl
+            } catch (Exception e) {
+                log.error("解析图片数据失败");
+                continue;
+            }
+
             if (StrUtil.isBlank(fileUrl)) {
                 log.info("当前链接为空，已跳过：{}", fileUrl);
                 continue;
@@ -418,7 +443,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
             //定义上传图片方法所需参数
             PictureUploadRequestDTO pictureUploadRequestDTO = new PictureUploadRequestDTO();
             pictureUploadRequestDTO.setFileUrl(fileUrl);
-            pictureUploadRequestDTO.setPicName(namePrefix+(uploadCount+1));
+            pictureUploadRequestDTO.setPicName(namePrefix + (uploadCount + 1));
 
             //尝试上传，成功则自增，失败则跳过，达到count就结束，并返回成功的数量
             try {
@@ -434,6 +459,39 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
             }
         }
         return uploadCount;
+    }
+
+
+    /**
+     * 清理对象存储中的图片
+     *
+     * @param oldPicture
+     */
+    @Async
+    @Override
+    public void clearPictureFile(Picture oldPicture) {
+        String host = "https://oy-1372001294.cos.ap-guangzhou.myqcloud.com/";//域名
+
+        //判断改图片是否被多条记录使用
+        String pictureUrl = oldPicture.getUrl();//这里拿到的是包含域名的url，这个url有可能是原图的url，也有可能是webp的url
+        String key = pictureUrl.replace(host, "");//使用replace将域名部分替换为空字符串
+        long count = this.lambdaQuery()
+                .eq(Picture::getUrl, pictureUrl)
+                .count();
+        //大于1就代表不只一条记录用到这张图片，那就不清理
+        if (count > 1) {
+            return;
+        }
+        //清理图片（有可能清理的是转换格式后的那张，也可能清理原图）
+        cosManager.deleteObject(key);
+
+
+        //清理缩略图
+        String thumbnailUrl = oldPicture.getThumbnailUrl();//缩略图Url，包含域名
+        if (StrUtil.isNotBlank(thumbnailUrl)) {
+            String thumbnailUrlKey = thumbnailUrl.replace(host, "");
+            cosManager.deleteObject(thumbnailUrlKey);
+        }
     }
 
 

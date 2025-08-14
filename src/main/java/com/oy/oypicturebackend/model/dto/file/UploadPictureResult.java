@@ -5,6 +5,7 @@ import lombok.Data;
 /**
  * 用于接受图片解析信息的包装类
  * 上传图片的结果，调用完上传图片方法之后就会用到这个类
+ * 这个类充当数据库实体类和对象存储返回的结果类之间的中间人
  */
 @Data
 public class UploadPictureResult {
@@ -13,6 +14,11 @@ public class UploadPictureResult {
      * 图片地址
      */
     private String url;
+
+    /**
+     * 缩略图Url
+     */
+    private String thumbnailUrl;
 
     /**
      * 图片名称

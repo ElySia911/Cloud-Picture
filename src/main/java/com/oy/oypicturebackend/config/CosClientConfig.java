@@ -21,7 +21,7 @@ public class CosClientConfig {
     private String region; //区域
     private String bucket; //桶名
 
-    @Bean
+    @Bean//方法的返回值交给Spring来管理，即让Spring来管理这个方法创建的对象
     public COSClient cosClient() {
         // 1 初始化用户身份信息（secretId, secretKey）。
         COSCredentials cred = new BasicCOSCredentials(secretId, secretKey);
