@@ -92,5 +92,33 @@ public class PictureQueryRequestDTO extends PageRequest implements Serializable 
      */
     private Date reviewTime;
 
+    /**
+     * 空间id
+     */
+    private Long spaceId;
+
+    /**
+     * 是否只查询spaceId为null的数据
+     */
+    private boolean nullSpaceId;
+
+    /*为什么需要nullSpaceId字段：
+     * 当 spaceId = null 且 nullSpaceId = true：表示用户明确要查公共图库（只返回 spaceId = null 的图片
+     *当 spaceId = null 且 nullSpaceId = false：表示用户未指定空间（可能想查所有可见图片，具体逻辑由业务定义）
+     *
+     * */
+
+
+    /**
+     * 开始编辑时间
+     */
+    private Date startEditTime;
+
+    /**
+     * 结束编辑时间
+     */
+    private Date endEditTime;
+
+
     private static final long serialVersionUID = 1L;
 }

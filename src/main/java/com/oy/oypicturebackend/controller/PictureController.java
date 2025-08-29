@@ -5,12 +5,18 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.json.JSONUtil;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Cache;
 
 import com.oy.oypicturebackend.annotation.AuthCheck;
+import com.oy.oypicturebackend.api.aliyunai.AliYunAiApi;
+import com.oy.oypicturebackend.api.aliyunai.model.CreateOutPaintingTaskResponse;
+import com.oy.oypicturebackend.api.aliyunai.model.GetOutPaintingTaskResponse;
+import com.oy.oypicturebackend.api.imagesearch.ImageSearchApiFacade;
+import com.oy.oypicturebackend.api.imagesearch.model.ImageSearchResult;
 import com.oy.oypicturebackend.common.BaseResponse;
 import com.oy.oypicturebackend.common.DeleteRequest;
 import com.oy.oypicturebackend.common.ResultUtils;
@@ -21,11 +27,14 @@ import com.oy.oypicturebackend.exception.ThrowUtils;
 
 import com.oy.oypicturebackend.model.dto.picture.*;
 import com.oy.oypicturebackend.model.entity.Picture;
+import com.oy.oypicturebackend.model.entity.Space;
 import com.oy.oypicturebackend.model.entity.User;
 import com.oy.oypicturebackend.model.enums.PictureReviewStatusEnum;
 import com.oy.oypicturebackend.model.vo.PictureTagCategory;
 import com.oy.oypicturebackend.model.vo.PictureVO;
+import com.oy.oypicturebackend.service.PictureLikeService;
 import com.oy.oypicturebackend.service.PictureService;
+import com.oy.oypicturebackend.service.SpaceService;
 import com.oy.oypicturebackend.service.UserService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -38,9 +47,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.time.Duration;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -50,12 +57,16 @@ import java.util.concurrent.TimeUnit;
 public class PictureController {
     @Resource
     private UserService userService;
-
     @Resource
     private PictureService pictureService;
-
+    @Resource
+    private SpaceService spaceService;
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+    @Resource
+    private PictureLikeService pictureLikeService;
+    @Resource
+    private AliYunAiApi aliYunAiApi;
 
     /**
      * 构造本地缓存（正常来说需要封装起来）
@@ -118,20 +129,8 @@ public class PictureController {
         User loginUser = userService.getLoginUser(request);
         //从删除请求中提取出要删除的图片id
         Long id = deleteRequest.getId();
-
-        //判断是否存在，根据id查询数据库，若不存在这张图片则抛出未找到异常
-        Picture oldPicture = pictureService.getById(id);
-        ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR);
-
-        //仅本人或管理员可删除
-        if (!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
-        }
-        //操作数据库
-        boolean result = pictureService.removeById(id);
-        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
-        //数据库删了，对象存储也要删
-        pictureService.clearPictureFile(oldPicture);
+        //调用删除图片方法
+        pictureService.deletePicture(id, loginUser);
         return ResultUtils.success(true);
     }
 
@@ -207,6 +206,13 @@ public class PictureController {
         //查询数据库
         Picture picture = pictureService.getById(id);
         ThrowUtils.throwIf(picture == null, ErrorCode.NOT_FOUND_ERROR);
+        //空间权限校验，校验查出来的这张照片所属的空间是不是当前登录用户自己的空间
+        Long spaceId = picture.getSpaceId();
+        if (spaceId != null) {
+            //不等于null，就代表这张图片是私人的，要进行校验
+            User loginUser = userService.getLoginUser(request);
+            pictureService.checkPictureAuth(loginUser, picture);
+        }
 
         //接口要返回VO类型的数据，这里进行转换
         PictureVO pictureVO = pictureService.getPictureVO(picture, request);
@@ -248,21 +254,35 @@ public class PictureController {
      */
     @PostMapping("/list/page/vo")
     public BaseResponse<Page<PictureVO>> listPictureVOByPage(@RequestBody PictureQueryRequestDTO pictureQueryRequestDTO, HttpServletRequest request) {
+        //从请求DTO中获取当前页码和每页条数（继承自PageRequest基类的属性）
         long current = pictureQueryRequestDTO.getCurrent();
         long pageSize = pictureQueryRequestDTO.getPageSize();
         //限制爬虫，防止用户一次查询20张图片
         ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR);
 
-        //将请求DTO中的图片状态字段设置为审核通过，这样构造的sql就只查通过审核的，普通用户只能查看审核通过的图片
-        pictureQueryRequestDTO.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
+        //空间权限校验
+        Long spaceId = pictureQueryRequestDTO.getSpaceId();
+        if (spaceId == null) {
+            //若空间id为空，就会进这分支，将nullSpaceId字段 设置为true，明确查询公共图库，若没有这个字段，假设用户想查询所有图片，包括自己的私有和公共图库，系统就无法通过spaceId=null识别意图，会误判为只查询公共图库
+            pictureQueryRequestDTO.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());//将DTO中审核状态字段设置为审核通过
+            pictureQueryRequestDTO.setNullSpaceId(true);
+        } else {
+            //私有空间
+            User loginUser = userService.getLoginUser(request);
+            Space space = spaceService.getById(spaceId);//从数据库查出这个空间的信息，若空间不存在就报错，还查个屁的图片
+            ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR, "空间不存在");
+            if (!loginUser.getId().equals(space.getUserId())) {
+                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "没有空间权限");
+            }
+        }
 
         //构造分页参数
         Page<Picture> pageParam = new Page<>(current, pageSize);
 
-        //创建查询条件包装器
+        //创建查询条件包装器 （getQueryWrapper内部会根据nullSpaceId生成条件：space_id IS NULL；根据spaceId生成：space_id = ?）
         QueryWrapper<Picture> queryWrapper = pictureService.getQueryWrapper(pictureQueryRequestDTO);
 
-        //查询数据库
+        //查询数据库，执行分页查询，获取数据库原始数据
         Page<Picture> picturePage = pictureService.page(pageParam, queryWrapper);
 
         //脱敏获取封装类
@@ -273,60 +293,13 @@ public class PictureController {
 
 
     /**
-     * 分页获取图片列表（封装类，脱敏，用户可用，使用了缓存Redis）
-     *
-     * @param pictureQueryRequestDTO
-     * @param request
-     * @return
-     */
-/*    @PostMapping("/list/page/vo/cache")
-    public BaseResponse<Page<PictureVO>> listPictureVOByPageWithCache(@RequestBody PictureQueryRequestDTO pictureQueryRequestDTO, HttpServletRequest request) {
-        long current = pictureQueryRequestDTO.getCurrent();//页号
-        long pageSize = pictureQueryRequestDTO.getPageSize();//每页记录数
-        //限制爬虫，防止用户一次查询20张图片
-        ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR);
-
-        //将请求DTO中的图片状态字段设置为审核通过，这样构造的sql就只查通过审核的，普通用户只能查看审核通过的图片
-        pictureQueryRequestDTO.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
-
-
-        //要想查询缓存，那肯定要根据key去查value，那么先构造key
-        String queryCondition = JSONUtil.toJsonStr(pictureQueryRequestDTO);//查询条件作为key，而缓存的key是字符串，所以先序列化
-        String hashKey = DigestUtils.md5DigestAsHex(queryCondition.getBytes());//将序列化后的查询条件使用md5压缩一下
-        String redisKey = String.format("oypicture:listPictureVOByPage:%S", hashKey);//查询条件不同，对应的key也不同，最终redisKey由固定前缀+hashKey组成
-        //从Redis缓存中查询
-        ValueOperations<String, String> valueOps = stringRedisTemplate.opsForValue();//拿到可以操作redis的对象
-        String cachedValue = valueOps.get(redisKey);//根据key去查询
-        if (cachedValue != null) {
-            //缓存命中，返回结果，返回的结果是经过反序列的
-            Page<PictureVO> cachePage = JSONUtil.toBean(cachedValue, Page.class);
-            return ResultUtils.success(cachePage);
-        }
-
-        //没缓存，就要去数据库查询
-        Page<Picture> pageParam = new Page<>(current, pageSize);//构造分页参数
-        QueryWrapper<Picture> queryWrapper = pictureService.getQueryWrapper(pictureQueryRequestDTO);//构造查询条件包装器
-
-        Page<Picture> picturePage = pictureService.page(pageParam, queryWrapper);//查数据库
-
-        Page<PictureVO> pictureVOPage = pictureService.getPictureVOPage(picturePage, request);//脱敏获取封装类
-
-        //将脱敏后的数据进行序列化以便存入Redis缓存
-        String cacheValue = JSONUtil.toJsonStr(pictureVOPage);
-        int cacheExpireTime = 300 + RandomUtil.randomInt(0, 300);//5-10分钟过期，防止雪崩，雪崩即某一时间段内，大量缓存数据同时过期失效，导致原本应该由缓存处理的请求全部涌向数据库
-        valueOps.set(redisKey, cacheValue, cacheExpireTime, TimeUnit.SECONDS);
-
-        return ResultUtils.success(pictureVOPage);
-    }*/
-
-
-    /**
      * 分页获取图片列表（封装类，脱敏，用户可用，使用了本地缓存Caffeine和Redis缓存）
      *
      * @param pictureQueryRequestDTO
      * @param request
      * @return
      */
+    @Deprecated//考虑到私有空间的图片更新频率不好把握，这里编写的缓存分页查询图片接口暂时废弃
     @PostMapping("/list/page/vo/cache")
     public BaseResponse<Page<PictureVO>> listPictureVOByPageWithCache(@RequestBody PictureQueryRequestDTO pictureQueryRequestDTO, HttpServletRequest request) {
         long current = pictureQueryRequestDTO.getCurrent();//页号
@@ -355,7 +328,7 @@ public class PictureController {
         cachedValue = valueOps.get(cacheKey);//根据key去查询
         if (cachedValue != null) {
             //如果Redis缓存命中，更新本地缓存，返回结果，返回的结果是经过反序列的
-            LOCAL_CACHE.put(cacheKey,cachedValue);//更新本地缓存
+            LOCAL_CACHE.put(cacheKey, cachedValue);//更新本地缓存
             Page<PictureVO> cachePage = JSONUtil.toBean(cachedValue, Page.class);
             return ResultUtils.success(cachePage);
         }
@@ -393,42 +366,9 @@ public class PictureController {
         if (pictureEditRequestDTO == null || pictureEditRequestDTO.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        //操作数据库需要使用Picture实体类，new一个，然后属性复制
-        Picture picture = new Picture();
-        BeanUtils.copyProperties(pictureEditRequestDTO, picture);
-
-        //不要忘记将DTO的tags从List类型转换成数据库要求的json数组类型
-        picture.setTags(JSONUtil.toJsonStr(pictureEditRequestDTO.getTags()));
-
-        //编辑时间要同步更新，这里是更新数据库的editTime字段，不是updateTime字段，updateTime字段是数据库记录发生改变时候由数据库来更新
-        picture.setEditTime(new Date());
-
-        //校验数据，内部会对id进行必要性校验，没有id，数据库不知道要更新哪一张图片
-        pictureService.validPicture(picture);
-
         //获取当前登录用户的信息
         User loginUser = userService.getLoginUser(request);
-
-        //补充审核参数，将图片的状态设置为待审核
-        pictureService.fillReviewParams(picture, loginUser);
-
-        //获取要修改的图片的id
-        long id = pictureEditRequestDTO.getId();
-
-        //根据id查询数据库有没有这种图片
-        Picture oldPicture = pictureService.getById(id);
-
-        //校验，若为空，提示请求数据不存在
-        ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR);
-
-        //校验身份，仅图片创作者和管理员可编辑更新
-        if (!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
-        }
-
-        //操作数据库
-        boolean result = pictureService.updateById(picture);
-        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        pictureService.editPicture(pictureEditRequestDTO, loginUser);
         return ResultUtils.success(true);
     }
 
@@ -488,7 +428,104 @@ public class PictureController {
         return ResultUtils.success(uploadCount);
     }
 
+    /**
+     * 以图搜图
+     *
+     * @param searchPictureByPictureRequestDTO
+     * @return
+     */
+    @PostMapping("/search/picture")
+    public BaseResponse<List<ImageSearchResult>> searchPictureByPicture(@RequestBody SearchPictureByPictureRequestDTO searchPictureByPictureRequestDTO) {
+        ThrowUtils.throwIf(searchPictureByPictureRequestDTO == null, ErrorCode.PARAMS_ERROR);
+        Long pictureId = searchPictureByPictureRequestDTO.getPictureId();
+        ThrowUtils.throwIf(pictureId == null || pictureId <= 0, ErrorCode.PARAMS_ERROR);
+        Picture oldPicture = pictureService.getById(pictureId);
+        ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR);
+        List<ImageSearchResult> resultList = ImageSearchApiFacade.searchImage(oldPicture.getUrl());
+        return ResultUtils.success(resultList);
+    }
 
+    /**
+     * 按照颜色搜索
+     */
+    @PostMapping("/search/color")
+    public BaseResponse<List<PictureVO>> searchPictureByColor(@RequestBody SearchPictureByColorRequestDTO searchPictureByColorRequestDTO, HttpServletRequest request) {
+        ThrowUtils.throwIf(searchPictureByColorRequestDTO == null, ErrorCode.PARAMS_ERROR);
+        String picColor = searchPictureByColorRequestDTO.getPicColor();
+        Long spaceId = searchPictureByColorRequestDTO.getSpaceId();
+        User loginUser = userService.getLoginUser(request);
+        List<PictureVO> result = pictureService.searchPictureByColor(spaceId, picColor, loginUser);
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 批量编辑图片的分类和标签
+     *
+     * @param pictureEditByBatchRequestDTO
+     * @param request
+     * @return
+     */
+    @PostMapping("/edit/batch")
+    public BaseResponse<Boolean> editPictureByBatch(@RequestBody PictureEditByBatchRequestDTO pictureEditByBatchRequestDTO, HttpServletRequest request) {
+        ThrowUtils.throwIf(pictureEditByBatchRequestDTO == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        pictureService.editPictureByBatch(pictureEditByBatchRequestDTO, loginUser);
+        return ResultUtils.success(true);
+    }
+
+
+    /**
+     * 用户对图片进行点赞
+     */
+    @PostMapping("/like")
+    public BaseResponse<Boolean> likePicture(@RequestBody PictureLikeRequestDTO pictureLikeRequestDTO, HttpServletRequest request) {
+        ThrowUtils.throwIf(pictureLikeRequestDTO == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.PARAMS_ERROR);
+        pictureLikeService.likePicture(pictureLikeRequestDTO, loginUser);
+        return ResultUtils.success(true);
+    }
+
+    /**
+     * 获取用户点赞过的图片id列表
+     *
+     * @param request
+     * @return
+     */
+    @GetMapping("/my/like/picture")
+    public BaseResponse<List<Long>> listMyLikedPictureIds(HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.PARAMS_ERROR);
+        List<Long> myLikedPictureIds = pictureLikeService.listMyLikedPictureIds(loginUser.getId());
+        return ResultUtils.success(myLikedPictureIds);
+    }
+
+
+    /**
+     * 创建AI拓图任务
+     */
+    @PostMapping("/out_painting/create_task")
+    public BaseResponse<CreateOutPaintingTaskResponse> createPictureOutPaintingTask(@RequestBody CreatePictureOutPaintingTaskRequestDTO createPictureOutPaintingTaskRequestDTO, HttpServletRequest request) {
+        if (createPictureOutPaintingTaskRequestDTO == null || createPictureOutPaintingTaskRequestDTO.getPictureId() == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        CreateOutPaintingTaskResponse response = pictureService.createPictureOutPaintingTask(createPictureOutPaintingTaskRequestDTO, loginUser);
+        return ResultUtils.success(response);
+    }
+
+    /**
+     * 查询AI拓图任务结果
+     *
+     * @param taskId
+     * @return
+     */
+    @GetMapping("/out_painting/get_task")
+    public BaseResponse<GetOutPaintingTaskResponse> getPictureOutPaintingTask(String taskId) {
+        ThrowUtils.throwIf(StringUtils.isBlank(taskId), ErrorCode.PARAMS_ERROR);
+        GetOutPaintingTaskResponse task = aliYunAiApi.getOutPaintingTaskResponse(taskId);
+        return ResultUtils.success(task);
+    }
 }
 
 

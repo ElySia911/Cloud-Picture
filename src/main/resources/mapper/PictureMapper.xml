@@ -2,8 +2,11 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--下面这句是整个映射文件的根节点，namespace表示这个mapper对应的接口类的全限定名-->
 <mapper namespace="com.oy.oypicturebackend.mapper.PictureMapper">
 
+    <!--定义一个结果映射，名字叫BaseResultMap，用于把数据库查询的字段映射成Picture实体类里的属性-->
+    <!--property是Java类中的属性名 column是数据库中的字段名  jdbcType是数据库中该字段的JDBC类型-->
     <resultMap id="BaseResultMap" type="com.oy.oypicturebackend.model.entity.Picture">
         <id property="id" column="id" jdbcType="BIGINT"/>
         <result property="url" column="url" jdbcType="VARCHAR"/>
@@ -17,7 +20,9 @@
         <result property="picHeight" column="picHeight" jdbcType="INTEGER"/>
         <result property="picScale" column="picScale" jdbcType="DOUBLE"/>
         <result property="picFormat" column="picFormat" jdbcType="VARCHAR"/>
+        <result property="picColor" column="picColor" jdbcType="VARCHAR"/>
         <result property="userId" column="userId" jdbcType="BIGINT"/>
+        <result property="spaceId" column="spaceId" jdbcType="BIGINT"/>
         <result property="createTime" column="createTime" jdbcType="TIMESTAMP"/>
         <result property="editTime" column="editTime" jdbcType="TIMESTAMP"/>
         <result property="updateTime" column="updateTime" jdbcType="TIMESTAMP"/>
@@ -32,7 +37,7 @@
         id,url,thumbnailUrl,name,
         introduction,category,tags,
         picSize,picWidth,picHeight,
-        picScale,picFormat,userId,
+        picScale,picFormat,userId,spaceId,
         createTime,editTime,updateTime,
         isDelete,reviewStatus,reviewMessage,
         reviewerId,reviewTime

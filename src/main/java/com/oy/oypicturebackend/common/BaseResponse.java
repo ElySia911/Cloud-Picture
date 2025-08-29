@@ -5,7 +5,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 
-//统一响应结果类
+//统一响应结果类，用于接口返回统一格式的响应数据
 
 @Data
 public class BaseResponse<T> implements Serializable {
@@ -22,7 +22,9 @@ public class BaseResponse<T> implements Serializable {
         this.message = message;
     }
 
+    //重载
     public BaseResponse(int code, T data) {
+        //调用上面的全参构造方法，即构造器内部调用另一个构造器
         this(code, data, "");
     }
 

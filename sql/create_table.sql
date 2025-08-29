@@ -50,13 +50,12 @@ create table if not exists picture
 
 
 
-
 ALTER TABLE picture
     -- 添加新列
-    ADD COLUMN reviewStatus INT DEFAULT 0 NOT NULL COMMENT '审核状态：0-待审核; 1-通过; 2-拒绝',
-    ADD COLUMN reviewMessage VARCHAR(512) NULL COMMENT '审核信息',
-    ADD COLUMN reviewerId BIGINT NULL COMMENT '审核人 ID',
-    ADD COLUMN reviewTime DATETIME NULL COMMENT '审核时间';
+    ADD COLUMN reviewStatus  INT DEFAULT 0 NOT NULL COMMENT '审核状态：0-待审核; 1-通过; 2-拒绝',
+    ADD COLUMN reviewMessage VARCHAR(512)  NULL COMMENT '审核信息',
+    ADD COLUMN reviewerId    BIGINT        NULL COMMENT '审核人 ID',
+    ADD COLUMN reviewTime    DATETIME      NULL COMMENT '审核时间';
 
 -- 创建基于 reviewStatus 列的索引
 CREATE INDEX idx_reviewStatus ON picture (reviewStatus);
@@ -65,5 +64,55 @@ CREATE INDEX idx_reviewStatus ON picture (reviewStatus);
 ALTER TABLE picture
     -- 添加新列
     ADD COLUMN thumbnailUrl varchar(512) NULL COMMENT '缩略图 url';
+
+-- 空间表
+create table if not exists space
+(
+    id         bigint auto_increment comment 'id' primary key,
+    spaceName  varchar(128)                       null comment '空间名称',
+    spaceLevel int      default 0                 null comment '空间级别：0-普通版 1-专业版 2-旗舰版',
+    maxSize    bigint   default 0                 null comment '空间图片的最大总大小',
+    maxCount   bigint   default 0                 null comment '空间图片的最大数量',
+    totalSize  bigint   default 0                 null comment '当前空间下图片的总大小',
+    totalCount bigint   default 0                 null comment '当前空间下的图片数量',
+    userId     bigint                             not null comment '创建用户 id',
+    createTime datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    editTime   datetime default CURRENT_TIMESTAMP not null comment '编辑时间',
+    updateTime datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    isDelete   tinyint  default 0                 not null comment '是否删除',
+    -- 索引设计
+    index idx_userId (userId),        -- 提升基于用户的查询效率
+    index idx_spaceName (spaceName),  -- 提升基于空间名称的查询效率
+    index idx_spaceLevel (spaceLevel) -- 提升按空间级别查询的效率
+) comment '空间' collate = utf8mb4_unicode_ci;
+
+-- 添加新列
+ALTER TABLE picture
+    ADD COLUMN spaceId bigint null comment '空间 id（为空表示公共空间）';
+
+-- 创建索引
+CREATE INDEX idx_spaceId ON picture (spaceId);
+
+-- 图片表添加新列
+ALTER TABLE picture
+    ADD COLUMN picColor varchar(16) null comment '图片主色调';
+
+
+-- 点赞记录表
+create table if not exists picture_like
+(
+    id          bigint auto_increment comment '主键ID' primary key,
+    userId      bigint                               not null comment '用户ID',
+    pictureId   bigint                               not null comment '图片ID',
+    pictureName varchar(512)                         null comment '图片名称（冗余字段）',
+    likeCount   int        default 1                 not null comment '点赞次数（默认1）',
+    isDelete    tinyint(1) default 0                 not null comment '是否删除（0-未删，1-已删）',
+    createTime  datetime   default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime  datetime   default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+
+    unique key uk_user_picture (userId, pictureId), -- 保证一个用户只能点赞一张图一次
+    index idx_pictureId (pictureId)                 -- 加快按图片ID查询点赞数量或记录
+) comment '图片点赞记录表';
+
 
 

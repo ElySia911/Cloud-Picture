@@ -10,6 +10,7 @@ import com.oy.oypicturebackend.exception.BusinessException;
 import com.oy.oypicturebackend.exception.ErrorCode;
 import com.oy.oypicturebackend.manager.CosManager;
 import com.oy.oypicturebackend.model.dto.file.UploadPictureResult;
+import com.oy.oypicturebackend.exception.utils.HexColorExpander;
 import com.qcloud.cos.model.PutObjectResult;
 import com.qcloud.cos.model.ciModel.persistence.CIObject;
 import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
@@ -74,15 +75,15 @@ public abstract class PictureUploadTemplate {
             if (CollUtil.isNotEmpty(objectList)) {
                 //1.不为空就获取转换格式后的图片信息
                 CIObject compressCiObject = objectList.get(0);
-                CIObject thumbnailCiObject=compressCiObject;//先让缩略图对象thumbnailCiObject默认等于转格式后的图片信息（此时还不确定图片是否进行了缩略操作）
+                CIObject thumbnailCiObject = compressCiObject;//先让缩略图对象thumbnailCiObject默认等于转格式后的图片信息（此时还不确定图片是否进行了缩略操作）
                 //若大于1就代表图片在COS进行了缩略操作
                 if (objectList.size() > 1) {
                     //2.将缩略后的图片信息取出来赋给thumbnailCiObject
-                     thumbnailCiObject = objectList.get(1);
+                    thumbnailCiObject = objectList.get(1);
                 }
 
                 //封装压缩图返回结果，参数是原始文件名，转换格式后的图片信息，缩略后的图片信息
-                return buildResult(originalFilename, compressCiObject, thumbnailCiObject);
+                return buildResult(originalFilename, compressCiObject, thumbnailCiObject, imageInfo);
             }
             return buildResult(originalFilename, file, uploadFilePath, imageInfo);
         } catch (Exception e) {
@@ -149,17 +150,24 @@ public abstract class PictureUploadTemplate {
         uploadPictureResult.setPicSize(FileUtil.size(file));
         //设置图片可访问URL（COS主机地址+上传路径）
         uploadPictureResult.setUrl(cosClientConfig.getHost() + uploadPath);
+        //设置图片主色调
+        //uploadPictureResult.setPicColor(imageInfo.getAve());
+        String ave = imageInfo.getAve();
+        String pc = HexColorExpander.expandHexColor(ave);
+        uploadPictureResult.setPicColor(pc);
         return uploadPictureResult;
     }
 
     /**
      * 将转换格式后和图片进行缩略后的信息封装起来进行返回
-     * @param originFilename 原始文件名
-     * @param compressCiObject 图片转换格式后的对象
+     *
+     * @param originFilename    原始文件名
+     * @param compressCiObject  图片转换格式后的对象
      * @param thumbnailCiObject 缩略图对象
+     * @param imageInfo         图片信息
      * @return
      */
-    private UploadPictureResult buildResult(String originFilename, CIObject compressCiObject, CIObject thumbnailCiObject) {
+    private UploadPictureResult buildResult(String originFilename, CIObject compressCiObject, CIObject thumbnailCiObject, ImageInfo imageInfo) {
         UploadPictureResult uploadPictureResult = new UploadPictureResult();
         //提取压缩图的宽度
         int picWidth = compressCiObject.getWidth();
@@ -183,6 +191,11 @@ public abstract class PictureUploadTemplate {
         uploadPictureResult.setUrl(cosClientConfig.getHost() + "/" + compressCiObject.getKey());
         //往封装结果类里面设置缩略图Url
         uploadPictureResult.setThumbnailUrl(cosClientConfig.getHost() + "/" + thumbnailCiObject.getKey());
+        //往封装结果类里面设置图片主色调
+        //uploadPictureResult.setPicColor(imageInfo.getAve());
+        String ave = imageInfo.getAve();
+        String pc = HexColorExpander.expandHexColor(ave);
+        uploadPictureResult.setPicColor(pc);
         return uploadPictureResult;
     }
 

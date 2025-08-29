@@ -2,10 +2,8 @@ package com.oy.oypicturebackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.oy.oypicturebackend.model.dto.picture.PictureQueryRequestDTO;
-import com.oy.oypicturebackend.model.dto.picture.PictureReviewRequestDTO;
-import com.oy.oypicturebackend.model.dto.picture.PictureUploadByBatchRequestDTO;
-import com.oy.oypicturebackend.model.dto.picture.PictureUploadRequestDTO;
+import com.oy.oypicturebackend.api.aliyunai.model.CreateOutPaintingTaskResponse;
+import com.oy.oypicturebackend.model.dto.picture.*;
 import com.oy.oypicturebackend.model.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.oy.oypicturebackend.model.entity.User;
@@ -13,6 +11,7 @@ import com.oy.oypicturebackend.model.vo.PictureVO;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.List;
 
 /**
  * @author ouziyang
@@ -65,6 +64,30 @@ public interface PictureService extends IService<Picture> {
     void validPicture(Picture picture);
 
     /**
+     * 根据颜色搜索图片
+     *
+     * @param spaceId
+     * @param picColor
+     * @param loginUser
+     * @return
+     */
+    List<PictureVO> searchPictureByColor(Long spaceId, String picColor, User loginUser);
+
+    /**
+     * 批量编辑图片
+     *
+     * @param pictureEditByBatchRequestDTO
+     * @param loginUser
+     */
+    void editPictureByBatch(PictureEditByBatchRequestDTO pictureEditByBatchRequestDTO, User loginUser);
+
+
+
+
+    /*-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
+
+    /**
      * 图片审核请求
      *
      * @param pictureReviewRequestDTO 审核请求
@@ -84,10 +107,31 @@ public interface PictureService extends IService<Picture> {
 
     /**
      * 清理对象存储中的图片文件
+     *
      * @param oldPicture
      */
     void clearPictureFile(Picture oldPicture);
+
+
+    /**
+     * 删除图片，管理员或图片作者可以删
+     *
+     * @param pictureId
+     * @param loginUser
+     */
+    void deletePicture(long pictureId, User loginUser);
+
+    /**
+     * 编辑（更新）图片 （用户使用）
+     *
+     * @param pictureEditRequestDTO
+     * @param loginUser
+     */
+    void editPicture(PictureEditRequestDTO pictureEditRequestDTO, User loginUser);
+
+
     /*-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
 
     /**
      * 填充审核参数：待审核  审核通过  拒绝
@@ -96,4 +140,20 @@ public interface PictureService extends IService<Picture> {
      * @param loginUser
      */
     void fillReviewParams(Picture picture, User loginUser);
+
+    /**
+     * 校验空间图片的权限 传进来的参数就是图片和当前登录的这个人
+     *
+     * @param loginUser
+     * @param picture
+     */
+    void checkPictureAuth(User loginUser, Picture picture);
+
+    /**
+     * 创建扩图任务
+     *
+     * @param createPictureOutPaintingTaskRequestDTO
+     * @param loginUser
+     */
+    CreateOutPaintingTaskResponse createPictureOutPaintingTask(CreatePictureOutPaintingTaskRequestDTO createPictureOutPaintingTaskRequestDTO, User loginUser);
 }
