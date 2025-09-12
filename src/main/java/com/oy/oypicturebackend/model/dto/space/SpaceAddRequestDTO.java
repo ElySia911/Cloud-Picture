@@ -20,5 +20,10 @@ public class SpaceAddRequestDTO implements Serializable {
      */
     private Integer spaceLevel;
 
+    /**
+     * 空间类型：0-私人 1-团队
+     */
+    private Integer spaceType;
+
     private static final long serialVersionUID = 1L;
 }

@@ -19,8 +19,6 @@ public class OssConfig {
 
     @PostConstruct
     public void init() {
-        System.out.println("Oss 配置endpoint = " + endpoint);
-        System.out.println("Oss 配置accessKeyId = " + accessKeyId);
-        System.out.println("Oss 配置bucketName = " + bucketName);
+
     }
 }

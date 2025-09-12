@@ -10,6 +10,7 @@ import com.oy.oypicturebackend.constant.UserConstant;
 import com.oy.oypicturebackend.exception.BusinessException;
 import com.oy.oypicturebackend.exception.ErrorCode;
 import com.oy.oypicturebackend.exception.ThrowUtils;
+import com.oy.oypicturebackend.manager.auth.SpaceUserAuthManager;
 import com.oy.oypicturebackend.model.dto.space.*;
 import com.oy.oypicturebackend.model.entity.Space;
 import com.oy.oypicturebackend.model.entity.User;
@@ -38,6 +39,9 @@ public class SpaceController {
 
     @Resource
     private SpaceService spaceService;
+
+    @Resource
+    private SpaceUserAuthManager spaceUserAuthManager;
 
     /**
      * 新建私人空间
@@ -154,8 +158,13 @@ public class SpaceController {
         Space space = spaceService.getById(id);
         ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR);
 
+        User loginUser = userService.getLoginUser(request);
+        //根据空间和登录用户拿到权限列表
+        List<String> permissionList = spaceUserAuthManager.getPermissionList(space, loginUser);
+
         //接口要返回VO类型的数据，这里进行转换
         SpaceVO spaceVO = spaceService.getSpaceVO(space, request);
+        spaceVO.setPermissionList(permissionList);
         return ResultUtils.success(spaceVO);
     }
 

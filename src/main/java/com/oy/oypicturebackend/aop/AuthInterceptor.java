@@ -32,11 +32,11 @@ public class AuthInterceptor {
      * @return
      */
     @Around("@annotation(authCheck)")
-//Around表示这个切面在方法前后都插入逻辑，切入点表达式是拦截所有被@AuthCheck注解标记的方法，并且能拿到注解本身authCheck对象，用于获取注解参数
+//Around表示这个切面在方法执行前后都插入逻辑，切入点表达式是拦截所有被@AuthCheck注解标记的方法，并且能拿到注解本身authCheck对象，用于获取注解参数
     public Object doInterceptor(ProceedingJoinPoint joinPoint, AuthCheck authCheck) throws Throwable {
         String mustRole = authCheck.mustRole();
 
-        //因为AOP不在controller中，所有不能直接@RequestParam或@RequestBody拿请求，所以通过RequestContextHolder获取当前线程绑定的请求对象
+        //因为AOP不在controller中，所有不能直接@RequestParam或@RequestBody拿请求，所以通过RequestContextHolder（可以理解成请求上下文）获取当前线程绑定的请求对象
         RequestAttributes requestAttributes = RequestContextHolder.currentRequestAttributes();
         HttpServletRequest request = ((ServletRequestAttributes) requestAttributes).getRequest();//这样就拿到了HttpServletRequest
 
@@ -46,7 +46,7 @@ public class AuthInterceptor {
         UserRoleEnum mustRoleEnum = UserRoleEnum.getEnumByValue(mustRole);//根据字符串类型的值获取枚举常量，即获取注解中要求的角色
         //如果不需要权限，就放行
         if (mustRoleEnum == null) {
-            return joinPoint.proceed();
+            return joinPoint.proceed();//proceed方法表示让方法继续执行
         }
         //以下的代码：必须有权限 ，才通过
         String userRole = loginUser.getUserRole();//获取登录用户的角色身份

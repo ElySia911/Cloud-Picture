@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.oy.oypicturebackend.constant.UserConstant;
 import com.oy.oypicturebackend.exception.BusinessException;
 import com.oy.oypicturebackend.exception.ErrorCode;
+import com.oy.oypicturebackend.manager.auth.StpKit;
 import com.oy.oypicturebackend.model.dto.user.UserQueryRequestDTO;
 import com.oy.oypicturebackend.model.dto.user.UserUpdateMySelfRequestDTO;
 import com.oy.oypicturebackend.model.entity.User;
@@ -118,6 +119,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         //4.保存用户的登录态，第一次登录的时候，会创建一个Session对象，将用户信息用键值对的形式保存在服务器的Session对象中，以便后续识别“当前登录的用户是谁”，并将唯一的session id返回给浏览器
         request.getSession().setAttribute(UserConstant.USER_LOGIN_STATE, user);
+
+        //记录用户登录态到 Sa-token，便于空间鉴权时使用
+        StpKit.SPACE.login(user.getId());//让当前用户在space体系下登录
+        StpKit.SPACE.getSession().set(UserConstant.USER_LOGIN_STATE, user);//把user对象存到space会话里面
         return this.getLoginUserVO(user);
     }
 

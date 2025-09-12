@@ -23,7 +23,7 @@ public interface PictureLikeService extends IService<PictureLike> {
     /**
      * 获取用户点赞过的图片id列表
      *
-     * @param loginUser
+     * @param userId
      * @return
      */
     List<Long> listMyLikedPictureIds(Long userId);

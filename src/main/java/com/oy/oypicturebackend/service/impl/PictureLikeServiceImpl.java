@@ -72,6 +72,7 @@ public class PictureLikeServiceImpl extends ServiceImpl<PictureLikeMapper, Pictu
         List<PictureLike> likeList = this.list(queryWrapper);
         //SELECT * FROM picture_like WHERE user_id = #{userId};
         List<Long> likedPictureIdList = new ArrayList<>();
+
         for (PictureLike pictureLike : likeList) {
             Long pictureId = pictureLike.getPictureId();
             if (pictureId != null && pictureId > 0) {
