@@ -26,3 +26,8 @@
 - 实时协同编辑
 - 资源共享
 - 可视化分析
+<img width="1133" height="485" alt="AI编辑页面" src="https://github.com/user-attachments/assets/15a96415-3e44-43f1-ba95-2bb605ba23b7" />
+<img width="760" height="585" alt="基础编辑页面" src="https://github.com/user-attachments/assets/6d19ea84-3225-4fd3-abbd-415ca128973e" />
+<img width="1674" height="700" alt="以图搜图页面" src="https://github.com/user-attachments/assets/87f98556-d60b-4677-8491-0f2ffb7e7b5b" /><img width="1751" height="834" alt="协同编辑页面" src="https://github.com/user-attachments/assets/72951d4a-ae74-47de-aee5-be6294619895" />
+<img width="1630" height="490" alt="图库分析页面" src="https://github.com/user-attachments/assets/e673064c-2eb4-483a-864f-752edfe11d7c" />
+
