@@ -1,0 +1,113 @@
+server:
+  port: 8123
+  servlet:
+    context-path: /api
+    session:
+      cookie:
+        max-age: 2592000
+
+spring:
+  application:
+    name: oy-picture-backend
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/your_database
+    username: your_username
+    password: your_password
+
+  redis:
+    database: 2
+    host: localhost
+    port: 6379
+    connect-timeout: 7000
+
+  session:
+    store-type: redis
+    timeout: 2592000
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+
+  shardingsphere:
+    datasource:
+      names: oy_picture
+      oy_picture:
+        type: com.zaxxer.hikari.HikariDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        url: jdbc:mysql://localhost:3306/your_database
+        username: your_username
+        password: your_password
+
+    rules:
+      sharding:
+        tables:
+          picture:
+            actual-data-nodes: oy_picture.picture
+            table-strategy:
+              standard:
+                sharding-column: spaceId
+                sharding-algorithm-name: picture_sharding-algorithm
+
+        sharding-algorithms:
+          picture_sharding-algorithm:
+            type: CLASS_BASED
+            props:
+              strategy: standard
+              algorithmClassName: com.oy.oypicturebackend.manager.sharding.PictureShardingAlgorithm
+
+    props:
+      sql-show: true
+
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+  global-config:
+    enable-sql-runner: true
+    db-config:
+      logic-delete-field: isDelete
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+
+logging:
+  level:
+    com.oy.oypicturebackend.mapper: DEBUG
+
+
+knife4j:
+  enable: true
+  openapi:
+    title: X图库
+    version: v4.0
+    group:
+      default:
+        api-rule: package
+        api-rule-resources:
+          - com.oy.oypicturebackend.controller
+
+
+aliyun:
+  oss:
+    endpoint: oss-cn-xxx.aliyuncs.com
+    access-key-id: your_access_key_id
+    access-key-secret: your_access_key_secret
+    bucket-name: your_bucket_name
+    avatar-path: avatar/
+
+
+aliYunAi:
+  apiKey: your_api_key
+
+
+cos:
+  client:
+    host: https://your-bucket.cos.region.myqcloud.com
+    secretId: your_secret_id
+    secretKey: your_secret_key
+    region: your_region
+    bucket: your_bucket_name
