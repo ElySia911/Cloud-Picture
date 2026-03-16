@@ -87,12 +87,12 @@ public class GetOutPaintingTaskResponse implements Serializable {
         private Integer total;
 
         /**
-         * 成功任务数
+         * 任务状态为成功的任务数。
          */
         private Integer succeeded;
 
         /**
-         * 失败任务数
+         * 任务状态为失败的任务数。
          */
         private Integer failed;
     }

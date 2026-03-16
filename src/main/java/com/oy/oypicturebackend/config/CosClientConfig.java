@@ -12,25 +12,28 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Data
-@Configuration//配置文件 会被springboot扫描加载
-@ConfigurationProperties(prefix = "cos.client")//获取yml文件的配置
+@Configuration//配置类 spring扫描加载这个类，类中的@Bean方法才有可能被执行，否则spring可能无法识别这个类进而忽略@Bean的方法
+@ConfigurationProperties(prefix = "cos.client")//将配置文件中以cos.client为前缀的配置项，自动映射到当前类的属性中
 public class CosClientConfig {
     private String host; //域名
-    private String secretId;
-    private String secretKey;
-    private String region; //区域
-    private String bucket; //桶名
+    private String secretId;//密钥id
+    private String secretKey;//密钥
+    private String region; //存储桶所在的地域，如ap-guangzhou
+    private String bucket; //存储桶名称
 
-    @Bean//方法的返回值交给Spring来管理，即让Spring来管理这个方法创建的对象
+    @Bean//方法返回的对象会交给Spring来管理，即让Spring来管理这个方法创建的对象，想用直接@Autowired注入就能拿到这个对象
     public COSClient cosClient() {
-        // 1 初始化用户身份信息（secretId, secretKey）。
+
+        // 1 根据配置文件的secretId和secretKey初始化身份凭证（COSCredentials）
         COSCredentials cred = new BasicCOSCredentials(secretId, secretKey);
-        // 2 设置 bucket 的地域, COS 地域的简称请参见 https://cloud.tencent.com/document/product/436/6224
+
+        // 2 ClientConfig类为配置信息类，类中包含了设置region（地域），https（协议），超时等等的方法
         ClientConfig clientConfig = new ClientConfig(new Region(region));
-        // 这里建议设置使用 https 协议
-        // 从 5.6.54 版本开始，默认使用了 https
         clientConfig.setHttpProtocol(HttpProtocol.https);
-        // 3 生成 cos 客户端。
-        return new COSClient(cred, clientConfig);
+
+
+        // 3 整合身份凭证和客户端配置，生成COSClient客户端实例，交由Spring容器管理。
+        COSClient cosClient = new COSClient(cred, clientConfig);
+        return cosClient;
     }
 }

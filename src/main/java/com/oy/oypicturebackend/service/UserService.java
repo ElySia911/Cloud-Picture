@@ -48,21 +48,20 @@ public interface UserService extends IService<User> {
     User getLoginUser(HttpServletRequest request);
 
     /**
+     * 获取脱敏后的登录用户信息，即从User（未脱敏）转成LoginUserVO（脱敏）
+     *
+     * @param user
+     * @return
+     */
+    LoginUserVO getLoginUserVO(User user);
+
+    /**
      * 用户注销
      *
      * @param request
      * @return
      */
     boolean userLogout(HttpServletRequest request);
-
-
-    /**
-     * 脱敏的用户信息，即从User（未脱敏）转成LoginUserVO（脱敏）
-     *
-     * @param user
-     * @return
-     */
-    LoginUserVO getLoginUserVO(User user);
 
     /**
      * 获得脱敏后的信息，即从User（未脱敏）转成UserVO（脱敏），这个service是提供给用户根据id获取其他单个用户信息的

@@ -11,7 +11,7 @@ import javax.annotation.Resource;
  * WebSocket 配置（定义连接）
  */
 @Configuration
-@EnableWebSocket
+@EnableWebSocket//开启 Spring 对 WebSocket 的支持
 public class WebSocketConfig implements WebSocketConfigurer {
 
     @Resource
@@ -19,10 +19,11 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Resource
     private WsHandshakeInterceptor wsHandshakeInterceptor;//拦截器
 
+    //访问/ws/picture/edit路径的 WebSocket 请求，必须先过wsHandshakeInterceptor拦截器，再交给pictureEditHandler处理器
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(pictureEditHandler, "/ws/picture/edit")//当前端访问 /ws/picture/edit 时，用pictureEditHandler处理所有的WebSocket连接和消息
-                .addInterceptors(wsHandshakeInterceptor)//添加拦截器
+        registry.addHandler(pictureEditHandler, "/ws/picture/edit")
+                .addInterceptors(wsHandshakeInterceptor)
                 .setAllowedOrigins("*");
     }
 }

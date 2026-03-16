@@ -47,14 +47,14 @@ public class WsHandshakeInterceptor implements HandshakeInterceptor {
      * @param request    通用的请求类型对象
      * @param response
      * @param wsHandler
-     * @param attributes 用于给 WebSocket的Session会话设置属性
+     * @param attributes websocket会话的属性容器，存入的信息会在后续整个 WebSocket 通信过程中生效
      * @return
      * @throws Exception
      */
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response, WebSocketHandler wsHandler, Map<String, Object> attributes) throws Exception {
         if (request instanceof ServletServerHttpRequest) {//判断请求是否是ServletServerHttpRequest类型，ServletServerHttpRequest是ServerHttpRequest的子类，用于处理Servlet请求
-            HttpServletRequest httpServletRequest = ((ServletServerHttpRequest) request).getServletRequest();
+            HttpServletRequest httpServletRequest = ((ServletServerHttpRequest) request).getServletRequest();//拿到原生的 HttpServletRequest对象
             //从请求中获取参数
             String pictureId = httpServletRequest.getParameter("pictureId");
             if (StrUtil.isBlank(pictureId)) {

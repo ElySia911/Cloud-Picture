@@ -78,14 +78,14 @@ public class PictureController {
      * 构造本地缓存（正常来说需要封装起来）
      */
     private final Cache<String, String> LOCAL_CACHE = Caffeine.newBuilder()
-            .initialCapacity(1024)//初始容量
+            .initialCapacity(1024)//初始容量分配的内存
             .maximumSize(10000L)//最大10000条数据
-            .expireAfterWrite(5L, TimeUnit.MINUTES)// 缓存 5 分钟移除
+            .expireAfterWrite(5L, TimeUnit.MINUTES)// 缓存5分钟后移除
             .build();
 
 
     /**
-     * 上传图片 （可重新上传）
+     * 上传本地图片 （可重新上传）
      *
      * @param multipartFile
      * @param pictureUploadRequestDTO
@@ -93,8 +93,7 @@ public class PictureController {
      * @return
      */
     @PostMapping("/upload")
-    @SaSpaceCheckPermission(value = SpaceUserPermissionConstant.PICTURE_UPLOAD)
-//本质是@SaCheckPermission(type="space", value="picture:upload")
+    @SaSpaceCheckPermission(value = SpaceUserPermissionConstant.PICTURE_UPLOAD)//本质是@SaCheckPermission(type="space", value="picture:upload")
     //@AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<PictureVO> uploadPicture(@RequestPart("file") MultipartFile multipartFile, PictureUploadRequestDTO pictureUploadRequestDTO, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
@@ -123,10 +122,6 @@ public class PictureController {
 
     /**
      * 删除图片，管理员或者图片作者可删
-     *
-     * @param deleteRequest
-     * @param request
-     * @return
      */
     @PostMapping("/delete")
     @SaSpaceCheckPermission(value = SpaceUserPermissionConstant.PICTURE_DELETE)
@@ -147,10 +142,6 @@ public class PictureController {
 
     /**
      * 更新图片（管理员）
-     *
-     * @param pictureUpdateRequestDTO
-     * @param request
-     * @return
      */
     @PostMapping("/update")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
@@ -161,22 +152,17 @@ public class PictureController {
         //将DTO转换成实体
         Picture picture = new Picture();
         BeanUtils.copyProperties(pictureUpdateRequestDTO, picture);
-
         //实体类的tags是json数组以字符串的形式存在，而DTO的tags是List  两者之间要进行转换
         picture.setTags(JSONUtil.toJsonStr(pictureUpdateRequestDTO.getTags()));
-
         //对picture进行数据校验，检查核心字段是否符合要求
         pictureService.validPicture(picture);
-
+        //根据id查询数据库有没有这张图片，因为图片存在才能更新啊
         long id = pictureUpdateRequestDTO.getId();
-        //根据id查询数据库有没有这张图片
         Picture oldPicture = pictureService.getById(id);
         ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR);
-
         //补充审核参数
         User loginUser = userService.getLoginUser(request);
         pictureService.fillReviewParams(oldPicture, loginUser);
-
         //操作数据库，需要传入Picture实体对象
         boolean result = pictureService.updateById(picture);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
@@ -184,11 +170,23 @@ public class PictureController {
     }
 
     /**
+     * 编辑图片，和上面的更新图片接口(/update)差不多一样 （用户使用）
+     */
+    @PostMapping("/edit")
+    @SaSpaceCheckPermission(value = SpaceUserPermissionConstant.PICTURE_EDIT)
+    public BaseResponse<Boolean> editPicture(@RequestBody PictureEditRequestDTO pictureEditRequestDTO, HttpServletRequest request) {
+        //校验前端发过来请求是否为空 或者请求里面的id是否为空，如果id为空，数据库不知道编辑哪一张图片
+        if (pictureEditRequestDTO == null || pictureEditRequestDTO.getId() <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        //获取当前登录用户的信息
+        User loginUser = userService.getLoginUser(request);
+        pictureService.editPicture(pictureEditRequestDTO, loginUser);
+        return ResultUtils.success(true);
+    }
+
+    /**
      * 根据id获取图片（管理员）
-     *
-     * @param id
-     * @param request
-     * @return
      */
     @GetMapping("/get")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
@@ -206,10 +204,6 @@ public class PictureController {
     /**
      * 根据id获取图片（封装类），用户可用
      * 这个方法没有使用注解鉴权是因为，注解鉴权必须强制要求用户登录，而项目中的首页是不需要登录也能看到公共图库的图片的
-     *
-     * @param id
-     * @param request
-     * @return
      */
     @GetMapping("/get/vo")
     public BaseResponse<PictureVO> getPictureVOById(long id, HttpServletRequest request) {
@@ -267,12 +261,8 @@ public class PictureController {
 
 
     /**
-     * 分页获取图片列表（封装类，脱敏，用户可用）
+     * 分页获取图片列表（封装类，脱敏，用户可用，首页图片展示用的是这个接口）
      * 这个方法没有使用注解鉴权是因为，注解鉴权必须强制要求用户登录，而项目中的首页是不需要登录也能看到公共图库的图片的
-     *
-     * @param pictureQueryRequestDTO
-     * @param request
-     * @return
      */
     @PostMapping("/list/page/vo")
     public BaseResponse<Page<PictureVO>> listPictureVOByPage(@RequestBody PictureQueryRequestDTO pictureQueryRequestDTO, HttpServletRequest request) {
@@ -285,7 +275,7 @@ public class PictureController {
         //空间权限校验
         Long spaceId = pictureQueryRequestDTO.getSpaceId();
         if (spaceId == null) {
-            //若空间id为空，就会进这分支，将nullSpaceId字段 设置为true，明确查询公共图库，若没有这个字段，假设用户想查询所有图片，包括自己的私有和公共图库，系统就无法通过spaceId=null识别意图，会误判为只查询公共图库
+            //空间id为空，将nullSpaceId字段 设置为true，明确查询公共图库，sql会拼接上 spaceId is null的条件
             pictureQueryRequestDTO.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());//将DTO中审核状态字段设置为审核通过
             pictureQueryRequestDTO.setNullSpaceId(true);
         } else {
@@ -331,14 +321,13 @@ public class PictureController {
         long pageSize = pictureQueryRequestDTO.getPageSize();//每页记录数
         //限制爬虫，防止用户一次查询20张图片
         ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR);
-
         //将请求DTO中的图片状态字段设置为审核通过，这样构造的sql就只查通过审核的，普通用户只能查看审核通过的图片
         pictureQueryRequestDTO.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
 
         //要想查询缓存，那肯定要根据key去查value，那么先构造key
-        String queryCondition = JSONUtil.toJsonStr(pictureQueryRequestDTO);//查询条件作为key，而缓存的key是字符串，所以先序列化
-        String hashKey = DigestUtils.md5DigestAsHex(queryCondition.getBytes());//将序列化后的查询条件使用md5压缩一下
-        String cacheKey = String.format("listPictureVOByPage:%S", hashKey);//查询条件不同，对应的key也不同，最终cacheKey由固定前缀+hashKey组成
+        String queryCondition = JSONUtil.toJsonStr(pictureQueryRequestDTO);//先将查询条件序列化为JSON字符串
+        String hashKey = DigestUtils.md5DigestAsHex(queryCondition.getBytes());//将序列化后的查询条件使用md5哈希处理，得到一个字符串（哈希值）避免原始JSON字符串过长导致缓存键冗余。
+        String cacheKey = String.format("listPictureVOByPage:%S", hashKey);//查询的条件不同，对应的hashKey也不同，最终cacheKey由固定前缀+hashKey组成
 
         //1.先查本地缓存
         String cachedValue = LOCAL_CACHE.getIfPresent(cacheKey);
@@ -349,10 +338,10 @@ public class PictureController {
         }
 
         //2.本地缓存未命中，查询Redis分布式缓存
-        ValueOperations<String, String> valueOps = stringRedisTemplate.opsForValue();//先拿到一个可以操作redis数据的对象valueOps
+        ValueOperations<String, String> valueOps = stringRedisTemplate.opsForValue();//先拿到一个可以操作redis的String类型对象valueOps
         cachedValue = valueOps.get(cacheKey);//根据key去查询
         if (cachedValue != null) {
-            //如果Redis缓存命中，更新本地缓存，返回结果，返回的结果是经过反序列的
+            //如果Redis缓存命中，说明redis中有缓存，则更新本地缓存，返回结果，返回的结果是经过反序列的
             LOCAL_CACHE.put(cacheKey, cachedValue);//更新本地缓存
             Page<PictureVO> cachePage = JSONUtil.toBean(cachedValue, Page.class);
             return ResultUtils.success(cachePage);
@@ -361,17 +350,15 @@ public class PictureController {
         //3.若本地缓存和Redis缓存都没命中，则去查数据库
         Page<Picture> pageParam = new Page<>(current, pageSize);//构造分页参数
         QueryWrapper<Picture> queryWrapper = pictureService.getQueryWrapper(pictureQueryRequestDTO);//构造查询条件包装器
-
         Page<Picture> picturePage = pictureService.page(pageParam, queryWrapper);//查数据库
-
         Page<PictureVO> pictureVOPage = pictureService.getPictureVOPage(picturePage, request);//脱敏获取封装类
 
-        //4.将从数据库查到的数据用来更新缓存，要更新Redis缓存和本地缓存
+        //4.将转换后的PictureVO分页对象序列化为JSON字符串用来更新缓存，要更新Redis缓存和本地缓存
         String cacheValue = JSONUtil.toJsonStr(pictureVOPage);
         //更新本地缓存
         LOCAL_CACHE.put(cacheKey, cacheValue);
         //更新Redis缓存
-        int cacheExpireTime = 300 + RandomUtil.randomInt(0, 300);//5-10分钟过期，防止雪崩，雪崩即某一时间段内，大量缓存数据同时过期失效，导致原本应该由缓存处理的请求全部涌向数据库
+        int cacheExpireTime = 300 + RandomUtil.randomInt(0, 300);//300秒（5分钟）基础上，随机增加0-300秒（0-5分钟）总过期时间5-10分钟过期，防止雪崩，雪崩即某一时间段内，大量缓存数据同时过期失效，导致原本应该由缓存处理的请求全部涌向数据库
         valueOps.set(cacheKey, cacheValue, cacheExpireTime, TimeUnit.SECONDS);
 
         return ResultUtils.success(pictureVOPage);
@@ -379,32 +366,8 @@ public class PictureController {
 
 
     /**
-     * 编辑（更新）图片 （用户使用）
-     *
-     * @param pictureEditRequestDTO
-     * @param request
-     * @return
-     */
-    @PostMapping("/edit")
-    @SaSpaceCheckPermission(value = SpaceUserPermissionConstant.PICTURE_EDIT)
-    public BaseResponse<Boolean> editPicture(@RequestBody PictureEditRequestDTO pictureEditRequestDTO, HttpServletRequest request) {
-        //校验前端发过来请求是否为空 或者请求里面的id是否为空，如果id为空，数据库不知道编辑哪一张图片
-        if (pictureEditRequestDTO == null || pictureEditRequestDTO.getId() <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
-        //获取当前登录用户的信息
-        User loginUser = userService.getLoginUser(request);
-        pictureService.editPicture(pictureEditRequestDTO, loginUser);
-        return ResultUtils.success(true);
-    }
-
-    /**
      * 向前端返回图片相关的标签和分类数据，提供一个固定的标签与分类列表
-     * 核心目的：
-     * 展示可选的标签（比如用户上传图片时，可从这些标签中选择）。
-     * 展示分类导航（比如按 “模板”“海报” 等分类浏览图片）
-     *
-     * @return
+     * 核心目的：展示可选的标签（比如用户上传图片时，可从这些标签中选择）。展示分类导航（比如按 “模板”“海报” 等分类浏览图片）
      */
     @GetMapping("/tag_category")
     public BaseResponse<PictureTagCategory> listPictureTagCategory() {
@@ -437,9 +400,10 @@ public class PictureController {
         return ResultUtils.success(true);
     }
 
+//0.<
 
     /**
-     * 批量抓取并上传创建图片
+     * 批量抓取并上传创建图片（管理员）
      *
      * @param pictureUploadByBatchRequestDTO
      * @param request

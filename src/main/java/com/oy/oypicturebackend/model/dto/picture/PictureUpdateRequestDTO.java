@@ -27,7 +27,7 @@ public class PictureUpdateRequestDTO implements Serializable {
      */
     private String category;
     /**
-     * 标签 List类型，方便前端传js数组
+     * 标签 字符串类型的列表，方便前端传js数组
      */
     private List<String> tags;
 

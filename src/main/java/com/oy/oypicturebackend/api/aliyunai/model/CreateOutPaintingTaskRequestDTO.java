@@ -8,7 +8,7 @@ import java.io.Serializable;
 
 /**
  * 创建扩图任务请求DTO
- * 使用了Hutool的@Alias注解，用于指定JSON字段名，避免映射字段名不一致的问题
+ * 使用了Hutool的@Alias注解，用于指定JSON序列化/反序列化时的字段名，解决Java驼峰命名（如imageUrl）与API要求的下划线命名（image_url）不一致的问题
  * 使用了Jackson的@JsonProperty注解，用于控制 JSON序列化和反序列化时的字段名
  */
 @Data
@@ -108,3 +108,13 @@ public class CreateOutPaintingTaskRequestDTO implements Serializable {
         private Boolean addWatermark = false;
     }
 }
+
+/*
+ * 给xScale和yScale两个字段加了@JsonProperty注解
+ * 因为@Data注解，它会自动给xScale生成一个“取值方法”，叫getXScale()，get+XScale，X大写
+ * 而Jackson看到getXScale()这个方法，会推测Java字段的名字，会先去掉get，剩下XScale，然后把首字母改成小写，变成xScale
+ * 但Jackson觉得第二个字母大写不常见，所以改成了全小写xscale
+ * 结果就是Jackson认为Java的xScale字段对应的JSON名字是xscale，而不是xScale。这就导致了前端传递参数名xScale是无法赋值给xScale字段
+ * 所以加了@JsonProperty注解，告诉Jackson，Java的xScale字段对应的JSON名字是xScale
+ * 前端传xScale，Jackson看到注解，就知道Java的xScale字段对应的JSON名字是xScale，所以就能赋值了
+ * */

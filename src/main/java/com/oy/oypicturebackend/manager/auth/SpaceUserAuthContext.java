@@ -6,8 +6,7 @@ import com.oy.oypicturebackend.model.entity.SpaceUser;
 import lombok.Data;
 
 /**
- * SpaceUserAuthContext（空间用户授权上下文）
- * 表示用户在特定空间内的授权上下文，包括关联的图片、空间和用户信息。
+ * 这个类不做任何的权限判断，它的职责是整合并承载权限判断所需的业务上下文数据，就是把请求涉及的资源信息整理好，交给权限系统使用
  */
 @Data
 public class SpaceUserAuthContext {
@@ -28,7 +27,7 @@ public class SpaceUserAuthContext {
     private Long spaceId;
 
     /**
-     * 空间用户 ID
+     * 空间用户 ID（记录的id）
      */
     private Long spaceUserId;
 

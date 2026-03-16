@@ -13,43 +13,43 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 获取相似图片列表页面地址（step 2）
+ * 获取相似图片列表的API（step 2）
  * 通过jsoup爬取相似图片页面的HTML，提取其中包含firstUrl的js脚本，并返回图片列表的页面地址
  */
 @Slf4j
 public class GetImageFirstUrlApi {
 
     public static String getImageFirstUrl(String url) {
-        //声明一个Document类型变量（Jsoup提供的HTML文档对象）
+        //初始化HTML文档对象，用于存储解析后的网页内容
         Document document = null;
         try {
-            //使用Jsoup连接到指定的url，获取HTML内容
+            //使用Jsoup库连接目标URL，设置5秒超时，获取并解析HTML文档
             document = Jsoup.connect(url)
                     .timeout(5000)
                     .get();
 
-            //从HTML文档里，获取所有<script标签>放进一个Elements集合
+            //从解析后的HTML中提取所有<script>标签的内容放进一个Elements集合
             Elements scriptElements = document.getElementsByTag("script");
-            //从集合中每次取出一个<script>元素命名为script，在循环体中使用它
+            //遍历所有<script>元素
             for (Element script : scriptElements) {
-
-                //.html是Jsoup提供的方法，用来获取标签内部的html内容，即js代码
+                //.html是Jsoup提供的方法，获取当前<script>标签内的JS代码文本
                 String scriptContent = script.html();
-
-                //判断字符串是否包含"firstUrl"关键词，\"是表示引号的意思，即关键词是带引号的，并不是firstUrl
+                //检查当前JS代码中是否包含"\"firstUrl\""（带双引号的firstUrl）。\"是表示引号的意思，即关键词是带引号的，并不是firstUrl
                 if (scriptContent.contains("\"firstUrl\"")) {
-
-                    //正则表达式，从JSON字符串中提取"firstUrl"对应的值
+                    //定义正则表达式，精准匹配 "firstUrl": "xxx" 格式的内容
+                    /*正则说明： "firstUrl" → 匹配字段名（带双引号）
+                     * \\s*:\\s* → 匹配冒号前后任意空白符（比如空格、制表符）
+                     * \"(.*?)\" → 匹配带双引号的属性值，并捕获引号内的内容*/
                     Pattern pattern = Pattern.compile("\"firstUrl\"\\s*:\\s*\"(.*?)\"");
 
-                    //用正则pattern匹配脚本内容scriptContent得到一个Matcher对象
+                    //用正则表达式去匹配当前script标签内的js文本
                     Matcher matcher = pattern.matcher(scriptContent);
 
-                    //查找第一个符合正则的内容，返回true
+                    //如果找到匹配的内容
                     if (matcher.find()) {
-                        //匹配成功就通过group(1)取到括号里的内容，即"firstUrl"的值
+                        //通过group(1)提取到正则表达式中括号里的内容，即"firstUrl"的值
                         String firstUrl = matcher.group(1);
-                        //因为JSON中斜杠是转义的\/,还原成正常的/
+                        //处理JSON转义的斜杠（把\/还原成/，比如https:\/\/xxx → https://xxx）
                         firstUrl = firstUrl.replace("\\/", "/");
                         return firstUrl;
                     }
@@ -64,8 +64,10 @@ public class GetImageFirstUrlApi {
 
     //测试上述方法
     public static void main(String[] args) {
-        String url = "https://graph.baidu.com/s?card_key=&entrance=GENERAL&extUiData[isLogoShow]=1&f=all&isLogoShow=1&session_id=3245127942267188312&sign=126473120d8b9e1b954ac01755691510&tpl_from=pc";
+        String url = "https://graph.baidu.com/s?card_key=&entrance=GENERAL&extUiData[isLogoShow]=1&f=all&isLogoShow=1&session_id=4226792212727440227&sign=126f577d58ea42ce005c301769953981&tpl_from=pc";
         String imageFirstUrl = getImageFirstUrl(url);
         System.out.println("成功获取相似图片页面的firstUrl：" + imageFirstUrl);
     }
 }
+
+//成功获取相似图片页面的firstUrl：https://graph.baidu.com/ajax/pcsimi?carousel=503&entrance=GENERAL&extUiData%5BisLogoShow%5D=1&inspire=general_pc&limit=30&next=2&render_type=card&session_id=4226792212727440227&sign=126f577d58ea42ce005c301769953981&tk=2eaf2&tpl_from=pc

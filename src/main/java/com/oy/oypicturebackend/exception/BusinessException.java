@@ -14,9 +14,6 @@ public class BusinessException extends RuntimeException {
 
     /**
      * 构造方法，传入错误码和错误信息
-     *
-     * @param code
-     * @param message
      */
     public BusinessException(int code, String message) {
         super(message);
@@ -25,8 +22,6 @@ public class BusinessException extends RuntimeException {
 
     /**
      * 构造方法，传入ErrorCode枚举对象
-     *
-     * @param errorCode
      */
     public BusinessException(ErrorCode errorCode) {
         super(errorCode.getMessage());
@@ -35,9 +30,6 @@ public class BusinessException extends RuntimeException {
 
     /**
      * 构造方法，传入ErrorCode枚举对象和自定义提示信息
-     *
-     * @param errorCode
-     * @param message
      */
     public BusinessException(ErrorCode errorCode, String message) {
         super(message);

@@ -17,6 +17,7 @@ import com.oy.oypicturebackend.model.enums.SpaceTypeEnum;
 import com.oy.oypicturebackend.service.PictureService;
 import com.oy.oypicturebackend.service.SpaceUserService;
 import com.oy.oypicturebackend.service.UserService;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
@@ -25,8 +26,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 空间成员权限管理器
- * 加载配置文件到对象，并提供根据角色获取权限列表的方法
+ * 空间成员权限管理器，负责根据空间类型与成员角色生成权限集合，然后交给Sa-token来判断
+ * 加载json配置文件到对象，并提供根据角色获取权限列表的方法
  */
 @Component
 public class SpaceUserAuthManager {
@@ -34,6 +35,13 @@ public class SpaceUserAuthManager {
     private UserService userService;
     @Resource
     private SpaceUserService spaceUserService;
+
+    @Resource
+    @Lazy
+    private StpInterfaceImpl stpInterfaceImpl;
+
+    @Resource
+    private PictureService pictureService;
 
 
     //用来接收配置文件转成对象后的数据
@@ -57,9 +65,9 @@ public class SpaceUserAuthManager {
             return new ArrayList<>();
         }
         //找到匹配的角色
-        SpaceUserRole role = SPACE_USER_AUTH_CONFIG.getRoles()//getRoles()方法返回的是SpaceUserRole类型的List
+        SpaceUserRole role = SPACE_USER_AUTH_CONFIG.getRoles()//获取角色列表，列表中每一个元素都是一个对象
                 .stream()//将列表转换成流的方式
-                .filter(r -> spaceUserRole.equals(r.getKey()))//判断当前角色有没有和列表中的其中一个匹配
+                .filter(r -> spaceUserRole.equals(r.getKey()))//过滤出key值等于spaceUserRole的元素
                 .findFirst()//找到第一个符合条件的元素
                 .orElse(null);//如果没有找到，则返回null
         if (role == null) {
@@ -90,9 +98,15 @@ public class SpaceUserAuthManager {
             if (userService.isAdmin(loginUser)) {
                 return ADMIN_PERMISSIONS;
             }
-            //todo 这里需要完善，用户不是管理员，但是图片的作者，要返回对应的权限
-            //return Collections.singletonList(SpaceUserPermissionConstant.PICTURE_VIEW);//查看权限
-            return new ArrayList<>();
+            //todo 102 - 107只实现了返回图片作者的权限的基本功能，没有做空指针防护等措施
+            SpaceUserAuthContext authContextByRequest = stpInterfaceImpl.getAuthContextByRequest();
+            Picture picture = pictureService.getById(authContextByRequest.getPictureId());
+            //如果查出来的图片的作者id等于当前登录用户的id，则返回管理员权限
+            if (picture.getUserId().equals(loginUser.getId())) {
+                return ADMIN_PERMISSIONS;
+            }
+            return Collections.singletonList(SpaceUserPermissionConstant.PICTURE_VIEW);//查看权限
+            //return new ArrayList<>();
 
         }
         //不是公共图库，就判断是私人空间还是团队空间

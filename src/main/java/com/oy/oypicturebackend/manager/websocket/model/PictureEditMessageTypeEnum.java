@@ -13,7 +13,8 @@ public enum PictureEditMessageTypeEnum {
     EDIT_ACTION("执行编辑操作", "EDIT_ACTION"),
     EXIT_EDIT("退出编辑状态", "EXIT_EDIT"),
     ERROR("发送错误", "ERROR"),
-    SYNC_STATE("同步当前状态", "SYNC_STATE");
+    SYNC_STATE("同步当前状态", "SYNC_STATE"),
+    HISTORY_EDIT_ACTION("历史编辑操作", "HISTORY_EDIT_ACTION");
 
 
     private final String text;

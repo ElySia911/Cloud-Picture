@@ -36,15 +36,12 @@ import java.util.stream.Collectors;
 public class SpaceController {
     @Resource
     private UserService userService;
-
     @Resource
     private SpaceService spaceService;
-
     @Resource
     private SpaceUserAuthManager spaceUserAuthManager;
-
     /**
-     * 新建私人空间
+     * 新建空间
      *
      * @param spaceAddRequestDTO
      * @param request
@@ -145,7 +142,7 @@ public class SpaceController {
     }
 
     /**
-     * 根据id获取空间（封装类），用户可用
+     * 根据id获取空间（封装类），用户本人可用
      *
      * @param id
      * @param request
@@ -225,7 +222,7 @@ public class SpaceController {
 
 
     /**
-     * 编辑（更新）空间 （用户使用）
+     * 编辑空间 （用户使用）
      *
      * @param spaceEditRequestDTO
      * @param request
@@ -237,7 +234,7 @@ public class SpaceController {
         if (spaceEditRequestDTO == null || spaceEditRequestDTO.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        //操作数据库需要使用Space实体类，new一个，然后属性拷贝，拷贝完不要忘记自动填充
+        //操作数据库需要使用Space实体类，new一个，然后属性拷贝
         Space space = new Space();
         BeanUtils.copyProperties(spaceEditRequestDTO, space);
         spaceService.fillSpaceBySpaceLevel(space);

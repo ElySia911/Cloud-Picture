@@ -10,7 +10,7 @@ import com.oy.oypicturebackend.exception.BusinessException;
 import com.oy.oypicturebackend.exception.ErrorCode;
 import com.oy.oypicturebackend.manager.CosManager;
 import com.oy.oypicturebackend.model.dto.file.UploadPictureResult;
-import com.oy.oypicturebackend.exception.utils.HexColorExpander;
+import com.oy.oypicturebackend.utils.HexColorExpander;
 import com.qcloud.cos.model.PutObjectResult;
 import com.qcloud.cos.model.ciModel.persistence.CIObject;
 import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
@@ -37,55 +37,52 @@ public abstract class PictureUploadTemplate {
     /**
      * 上传图片模板方法，返回包含业务信息的结果
      *
-     * @param inputSource      输入源，这个项目的输入源要不就是本地图片，要不就是字符串（远程URL）
-     * @param uploadPathPrefix 上传路径前缀，即key的路径部分，key由路径+文件名组成
+     * @param inputSource      输入源是本地图片/URL
+     * @param uploadPathPrefix 上传路径前缀，key的路径部分，即public/用户id 或 space/空间id   key由路径+文件名组成
      * @return
      */
     public UploadPictureResult uploadPicture(Object inputSource, String uploadPathPrefix) {
         //1.校验
         validPicture(inputSource);
-
         //2.构造上传路径
-        String uuid = RandomUtil.randomString(16);//生成16位随机字符串作为uuid，充当文件名的其中一部分
-        String originalFilename = getOriginalFilename(inputSource);//获取前端上传文件的原始文件名，获取到的原始文件名是带后缀的，例如 image.jpg
-        //拼唯一文件名：格式为“当前日期_uuid.文件后缀”，确保文件名不重复
+        String uuid = RandomUtil.randomString(16);//生成16位随机字符串，充当文件名的其中一部分
+        String originalFilename = getOriginalFilename(inputSource);//获取输入源的原始文件名，获取到的原始文件名是带后缀的，例如image.jpg
+        String suffix = FileUtil.getSuffix(originalFilename);//获取原始文件的后缀格式
+        if (suffix.length() > 4) {
+            suffix = suffix + ".jpg";
+        }
+        //拼唯一文件名：格式为“ 当前日期_uuid.文件后缀 ”
         String uploadFileName = String.format(//format方法是字符串格式化方法，可以用占位符%s %d等把多个变量拼接成一个有格式的字符串
                 "%s_%s.%s",
                 DateUtil.formatDate(new Date()),
                 uuid,
-                FileUtil.getSuffix(originalFilename));//获取原始文件的后缀
-        //再拼COS的Key ：格式为“/路径前缀/唯一文件名”
+                suffix);//获取原始文件的后缀格式
+        //再拼COS的Key ：格式为“/路径前缀/唯一文件名” 。最终的key例如：/public/用户id/日期_uuid.文件后缀
         String uploadFilePath = String.format("/%s/%s", uploadPathPrefix, uploadFileName);
 
         File file = null;
         try {
-            //3创建临时文件，用上传地址作为文件名前缀，后缀为null
+            //3创建一个临时文件，用上传地址作为文件名前缀，后缀为null，因为上传地址已经有后缀名
             file = File.createTempFile(uploadFilePath, null);
-            // processFile(...) 把输入源落地到临时文件
-            processFile(inputSource, file);
+            processFile(inputSource, file);// processFile(...) 把输入源落地到临时文件
             //4.调用CosManager的putPictureObject方法上传文件到COS，返回上传结果
             PutObjectResult putObjectResult = cosManager.putPictureObject(uploadFilePath, file);
 
-            //5.从上传结果中获取图片信息对象（包含宽、高、格式等信息）
+            //5.CIUploadResult类中的OriginalInfo成员的ImageInfo记录了原图的信息（宽 高 格式 质量 主色调等）
             ImageInfo imageInfo = putObjectResult.getCiUploadResult().getOriginalInfo().getImageInfo();
 
             //6.从上传结果中获取COS对图片转换格式后和进行缩略后的持久化处理结果对象processResults
             ProcessResults processResults = putObjectResult.getCiUploadResult().getProcessResults();
-            List<CIObject> objectList = processResults.getObjectList();//从processResults中getObjectList字段，这里面包含了图片处理后的信息
+            List<CIObject> objectList = processResults.getObjectList();//从processResults中getObjectList字段，这里面包含了经过处理转换后的所有图片
             if (CollUtil.isNotEmpty(objectList)) {
-                //1.不为空就获取转换格式后的图片信息
-                CIObject compressCiObject = objectList.get(0);
-                CIObject thumbnailCiObject = compressCiObject;//先让缩略图对象thumbnailCiObject默认等于转格式后的图片信息（此时还不确定图片是否进行了缩略操作）
-                //若大于1就代表图片在COS进行了缩略操作
-                if (objectList.size() > 1) {
-                    //2.将缩略后的图片信息取出来赋给thumbnailCiObject
-                    thumbnailCiObject = objectList.get(1);
+                CIObject compressCiObject = objectList.get(0); //不为空就获取转换为webp格式后的图片信息
+                CIObject thumbnailCiObject = compressCiObject;//先让缩略图对象thumbnailCiObject默认等于转成webp格式后的图片信息（因为cosManager中规定了大于20KB的图片才进行缩略，若是不进行判断就直接进行get，会造成数组越界）
+                if (objectList.size() > 1) {//若大于1就代表图片在COS进行了缩略操作
+                    thumbnailCiObject = objectList.get(1);//将缩略后的图片信息取出来赋给thumbnailCiObject
                 }
-
-                //封装压缩图返回结果，参数是原始文件名，转换格式后的图片信息，缩略后的图片信息
-                return buildResult(originalFilename, compressCiObject, thumbnailCiObject, imageInfo);
+                return buildResult(originalFilename, compressCiObject, thumbnailCiObject, imageInfo);//封装压缩图返回结果，参数是原始文件名，转换格式后的图片信息，缩略后的图片信息
             }
-            return buildResult(originalFilename, file, uploadFilePath, imageInfo);
+            return buildResult(originalFilename, file, uploadFilePath, imageInfo);//封装原图的返回结果
         } catch (Exception e) {
             log.error("图片上传到COS对象存储失败", e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "上传失败");
@@ -97,7 +94,7 @@ public abstract class PictureUploadTemplate {
     }
 
     /**
-     * 校验输入源（本地文件或URL） （被子类实现）
+     * 校验输入源和后缀（本地文件或URL） （被子类实现）
      *
      * @param inputSource
      */
@@ -187,7 +184,7 @@ public abstract class PictureUploadTemplate {
         uploadPictureResult.setPicFormat(compressCiObject.getFormat());
         //往封装结果类里面设置图片大小
         uploadPictureResult.setPicSize(compressCiObject.getSize().longValue());
-        //往封装结果类里面设置转换格式后的图片的地址Url
+        //往封装结果类里面设置转换格式后（webp）的图片的地址Url
         uploadPictureResult.setUrl(cosClientConfig.getHost() + "/" + compressCiObject.getKey());
         //往封装结果类里面设置缩略图Url
         uploadPictureResult.setThumbnailUrl(cosClientConfig.getHost() + "/" + thumbnailCiObject.getKey());

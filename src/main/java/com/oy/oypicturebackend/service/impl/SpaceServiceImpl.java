@@ -73,7 +73,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
         //1.填充参数默认值，前端传来的参数拷贝到space实体对象中
         Space space = new Space();
         BeanUtils.copyProperties(spaceAddRequestDTO, space);
-
         if (StrUtil.isBlank(space.getSpaceName())) {
             //如果前端传入的空间名称为null、空字符串、纯空格的话，就给个默认名字
             space.setSpaceName("默认空间");
@@ -83,6 +82,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
             space.setSpaceLevel(SpaceLevelEnum.COMMON.getValue());
         }
         if (space.getSpaceType() == null) {
+            //空间类型为空就默认设置为私有空间
             space.setSpaceType(SpaceTypeEnum.PRIVATE.getValue());
         }
 
@@ -101,26 +101,22 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
         }
 
         //4.控制同一用户只能创建一个私有空间、以及一个团队空间
-        //String l = String.valueOf(userId).intern();//valueOf方法将userId转为字符串类型后，使用intern方法将字符串放进字符串常量池，并返回字符串在常量池中的引用，如果常量池里已经有内容相同的字符串，就直接返回那个已存在的对象引用
-        //computeIfAbsent是lockMap的核心方法，当userId对应的锁不存在时，会执行后面的lambda表达式，创建一个新的Object对象作为锁，并放入map中，如果已存在，直接返回已有的锁对象
+        //computeIfAbsent：如果key（userId）不存在，就执行创建新Object作为锁；如果key存在，则返回已有的锁
         Object l = lockMap.computeIfAbsent(userId, k -> new Object());
         Long newSpaceId;
         synchronized (l) {//对象锁，锁住l指向的对象，只要两个线程的userId一样，它们拿到的都是同一个锁对象引用，synchronized(l)会让它们按顺序执行（一个线程执行完释放锁，另一个才能进）
             try {
                 //使用编程式事务的方式，确保了事务的提交是在锁内执行，如果改成使用@Transactional注解的方式就会出现锁先释放，事务后提交的问题
                 newSpaceId = transactionTemplate.execute(status -> {
-
-                    //判断是否已有空间，只有userId字段等于当前用户id，且当前用户创建过的空间类型等于当前用户申请创建的空间类型，才返回true
+                    //判断是否已有空间：userId字段等于传入的userId + spaceType字段等于传入的spaceType
                     boolean exists = this.lambdaQuery()
                             .eq(Space::getUserId, userId)
                             .eq(Space::getSpaceType, space.getSpaceType())
                             .exists();
-                    //如果有空间，就不能再创建
                     ThrowUtils.throwIf(exists, ErrorCode.OPERATION_ERROR, "每个用户的每类空间只能创建一个");
                     //否则创建空间
                     boolean result = this.save(space);
                     ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "保存空间到数据库失败");
-
                     //创建完空间，如果这个空间是团队空间，则还需要关联一条空间成员记录
                     if (SpaceTypeEnum.TEAM.getValue() == spaceAddRequestDTO.getSpaceType()) {
                         SpaceUser spaceUser = new SpaceUser();
@@ -137,11 +133,10 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
 
                 });
             } finally {
-                lockMap.remove(userId);//防止内存泄露
+                lockMap.remove(userId);//最终都移除该用户的锁对象 → 释放内存，防止内存泄露
             }
             //如果事务失败或者newSpaceId是null，就返回-1L表示失败；否则返回正常的空间ID
             return Optional.ofNullable(newSpaceId).orElse(-1L);
-
         }
     }
 
@@ -151,7 +146,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
      * 作用：检查数据是否符合业务规则
      *
      * @param space
-     * @param add   CRUD中的“Create/Update”前置校验，新增（Create）或修改（Update）空间时，必须先校验数据合法性（比如名称不为空、容量符合级别限制），否则直接报错。没有这个校验，CRUD 操作可能写入非法数据
+     * @param add
      */
     @Override
     public void validSpace(Space space, boolean add) {
@@ -163,7 +158,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
         SpaceLevelEnum spaceLevelEnum = SpaceLevelEnum.getEnumByValue(spaceLevel);//根据传入的空间的级别获取枚举实例
         Integer spaceType = space.getSpaceType();//空间类型 ：私人或团队
         SpaceTypeEnum spaceTypeEnum = SpaceTypeEnum.getEnumByValue(spaceType);//根据空间类型获取到枚举值
-
 
         //创建时校验，即当add为true时就进入
         if (add) {
@@ -182,7 +176,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
         if (StrUtil.isNotBlank(spaceName) && spaceName.length() > 30) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间名称过长");
         }
-        //对空间级别进行校验（创建和修改操作都适用），当空间级别不为null，但无法匹配对应的枚举值时，说明传入的级别数值不在系统的预设范围内，就会抛出异常
+        //对空间级别进行校验，当空间级别不为null，但无法匹配对应的枚举值时，说明传入的级别数值不在系统的预设范围内，就会抛出异常
         if (spaceLevel != null && spaceLevelEnum == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间级别不存在");
         }
@@ -198,7 +192,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
      *
      * @param space
      * @param request
-     * @return CRUD 中“Read”的结果转换，查询（Read）数据库得到 Space 实体后，不能直接返回给前端（可能包含敏感字段，或格式不符合前端需求），这个方法负责把实体转成前端需要的 SpaceVO（视图对象），是 “查询” 流程的必要步骤
      */
     @Override
     public SpaceVO getSpaceVO(Space space, HttpServletRequest request) {
@@ -223,43 +216,43 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
      *
      * @param spacePage
      * @param request
-     * @return CRUD 中“Read”的结果转换，查询（Read）数据库得到 Space 实体后，不能直接返回给前端（可能包含敏感字段，或格式不符合前端需求），这个方法负责把实体转成前端需要的 SpaceVO（视图对象），是 “查询” 流程的必要步骤
      */
     @Override
     public Page<SpaceVO> getSpaceVOPage(Page<Space> spacePage, HttpServletRequest request) {
-        //getRecords方法是从分页对象spacePage中获取当前这一页的Space实体列表数据，包含了当前这一页的数据、页码、总条数
+        //getRecords() 方法，返回的是当前页的实体数据列表
         List<Space> spaceList = spacePage.getRecords();
 
-        //创建一个新的SpaceVO类型分页对象spaceVOPage ，复用原分页对象spacePage的当前页码，每一页条数，总记录数
+        //创建一个新的SpaceVO类型分页对象，复用原分页对象spacePage的当前页码，每一页条数，总记录数
         Page<SpaceVO> spaceVOPage = new Page<>(spacePage.getCurrent(), spacePage.getSize(), spacePage.getTotal());
 
-        //判断列表是否为空，若为空，直接返回空的分页对象
+        //如果当前这一页没数据，即列表里面是空的，直接返回空的分页VO对象，提取终止流程
         if (CollUtil.isEmpty(spaceList)) {
             return spaceVOPage;
         }
-        //用stream流遍历列表spaceList中每个Space实体，使用SpaceVO类的objToVo方法，将每个Space实体转换为SpaceVO，即脱敏，用一个新的列表存起来
+        //将存储了Space类型数据的列表通过stream流的方式，遍历列表中每一个元素，调用SpaceVO类中的objToVo方法进行转换，得到一个存储SpaceVO类型数据的列表
         List<SpaceVO> spaceVOList = spaceList.stream()
                 .map(SpaceVO::objToVo)
                 .collect(Collectors.toList());
 
-        //用stream流遍历列表spaceList，使用Space实体的getUserId方法，提取出每个Space实体所属的用户id，用一个新的集合存起来（set集合去重）
+        //通过Stream流提取所有空间的userId，利用Set的唯一性实现userId去重，避免重复查询用户
         Set<Long> userIdSet = spaceList.stream()
                 .map(Space::getUserId)
                 .collect(Collectors.toSet());
 
-        /*根据userIdSet批量查询用户信息得到一个列表，将列表转换成stream流，groupingBy是分组，
-        分组条件是User::getId,就是将用户列表按用户的id分组得到一个Map ：key是用户id  value是该id对应的用户列表
-        由于是根据id查询的用户，正常情况下每个id只会对应一个用户，所以这个Map里面每个列表其实只有一个用户*/
+        /*调用listByIds方法：批量查询userIdSet对应的用户列表
+         * 流式处理：按用户ID分组，得到key为用户ID、value为对应用户列表的Map（单ID仅对应一个用户）*/
         Map<Long, List<User>> userIdUserListMap = userService.listByIds(userIdSet)
                 .stream()
                 .collect(Collectors.groupingBy(User::getId));
 
-        //遍历列表中每个元素，用spaceVO临时变量来表示，获取对应的userId
+        //遍历列表中每个元素，用spaceVO临时变量来表示
         spaceVOList.forEach(spaceVO -> {
+            //取出每个元素对应的userId
             Long userId = spaceVO.getUserId();
             User user = null;
-            //从Map查一下有没有key等于这个userId的记录，有的话，就取这条记录中第一个元素赋给user
+            //从userIdUserListMap里面检查有没有key等于这个userId的记录
             if (userIdUserListMap.containsKey(userId)) {
+                //有的话，就通过get(userId)找到这个key，然后通过get(0)获取这个key的value中的第一个元素，即拿到一个user
                 user = userIdUserListMap.get(userId).get(0);
             }
             //将user进行脱敏后设置给spaceVO的user字段
@@ -276,7 +269,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
      * 作用：将前端查询参数转换为数据库查询条件
      *
      * @param spaceQueryRequestDTO
-     * @return CRUD 中“Read”的条件构建，前端查询（Read）空间时，会传入各种筛选条件（如按用户 ID、空间名称查询），这个方法把这些条件转换成数据库能理解的查询语句（通过 QueryWrapper），是 “查询” 的前置条件。
      */
     @Override
     public QueryWrapper<Space> getQueryWrapper(SpaceQueryRequestDTO spaceQueryRequestDTO) {
@@ -296,17 +288,14 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
         Integer spaceType = spaceQueryRequestDTO.getSpaceType();
         String sortField = spaceQueryRequestDTO.getSortField();
         String sortOrder = spaceQueryRequestDTO.getSortOrder();
-
         //拼接查询条件
         queryWrapper.eq(ObjUtil.isNotEmpty(id), "id", id);//当id不为空时，添加id=?的精确匹配条件
         queryWrapper.eq(ObjUtil.isNotEmpty(userId), "userId", userId);// 当userId不为空时，添加userId=?的精确匹配条件，用于查询空间的创建者
         queryWrapper.like(StrUtil.isNotBlank(spaceName), "spaceName", spaceName);//当spaceName不为空且不是空白字符串时，添加spaceName LIKE %?%的模糊匹配条件
         queryWrapper.eq(ObjUtil.isNotEmpty(spaceLevel), "spaceLevel", spaceLevel);//当spaceLevel不为空时，添加spaceLevel = ?的精确匹配条件，用于查询特定等级的空间
         queryWrapper.eq(ObjUtil.isNotEmpty(spaceType), "spaceType", spaceType);//当spaceType不为空时，添加spaceType = ?的精确匹配条件，用于查询特定类型的空间
-
         //第一个参数是条件判断，判断排序字段sortField是否不为空且不是空白字符串，只有成立时，才会添加排序条件。第二个参数是判断排序顺序是否为ascend升序，若为true，则升序，否则降序。第三个参数是要进行排序的字段
         queryWrapper.orderBy(StrUtil.isNotEmpty(sortField), sortOrder.equals("ascend"), sortField);
-
         //打印一下拼接好的的sql条件，不含from和表名，仅where后的条件
         String sqlSegment = queryWrapper.getCustomSqlSegment();
         System.out.println("【构建好的sql条件：" + sqlSegment + "】");

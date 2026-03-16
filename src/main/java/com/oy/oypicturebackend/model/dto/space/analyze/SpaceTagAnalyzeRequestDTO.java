@@ -4,7 +4,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 /**
- * 对空间图片的 标签 进行分析的请求DTO
+ * 对空间图片的 标签 进行分析的请求
  */
 @EqualsAndHashCode(callSuper = true)
 @Data

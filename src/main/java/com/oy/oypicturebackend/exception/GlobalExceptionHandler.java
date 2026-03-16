@@ -13,12 +13,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Slf4j
 public class GlobalExceptionHandler {
 
+    //sa-token的未登录异常
     @ExceptionHandler(NotLoginException.class)
     public BaseResponse<?> notLoginException(NotLoginException e) {
         log.error("未登录异常", e);
         return ResultUtils.error(ErrorCode.NOT_LOGIN_ERROR, e.getMessage());
     }
 
+    //sa-token的没权限异常
     @ExceptionHandler(NotPermissionException.class)
     public BaseResponse<?> notPermissionExceptionHandler(NotPermissionException e) {
         log.error("权限异常", e);

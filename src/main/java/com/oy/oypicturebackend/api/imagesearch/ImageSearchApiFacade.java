@@ -24,7 +24,7 @@ public class ImageSearchApiFacade {
     }
 
     public static void main(String[] args) {
-        String imageUrl = "https://oy-1372001294.cos.ap-guangzhou.myqcloud.com/public/1948825777511940098/2025-08-06_Dy5ikpB1GksSZXxA.jpg";
+        String imageUrl = "https://oy-1372001294.cos.ap-guangzhou.myqcloud.com/public/1948825777511940098/2025-10-28_EvUKqQEh0oOqAO2U.webp";
         List<ImageSearchResult> imageSearchResults = searchImage(imageUrl);
         System.out.println("结果列表" + imageSearchResults);
     }

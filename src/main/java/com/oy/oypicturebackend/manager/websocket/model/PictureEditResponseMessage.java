@@ -5,6 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * 图片编辑响应消息
  */
@@ -37,5 +39,7 @@ public class PictureEditResponseMessage {
      * 图片的状态
      */
     private PictureEditState state;
+
+    private List<String> actions;
 
 }

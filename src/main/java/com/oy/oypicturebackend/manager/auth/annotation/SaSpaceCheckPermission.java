@@ -14,8 +14,7 @@ import java.lang.annotation.Target;
  * 空间权限认证：必须具有指定权限才能进入该方法
  * <p> 可标注在函数、类上（效果等同于标注在此类的所有方法上）
  */
-@SaCheckPermission(type = StpKit.SPACE_TYPE)
-//指定权限类型为：space  这样这个自定义注解@SaSpaceCheckPermission等价于@SaCheckPermission(type="space")
+@SaCheckPermission(type = StpKit.SPACE_TYPE) // @SaSpaceCheckPermission等价于@SaCheckPermission(type="space")
 @Retention(RetentionPolicy.RUNTIME)//注解保留策略，运行时仍有效
 @Target({ElementType.METHOD, ElementType.TYPE})//注解作用目标，可以作用在方法上，也可以作用在类上
 public @interface SaSpaceCheckPermission {
@@ -24,6 +23,8 @@ public @interface SaSpaceCheckPermission {
      * 需要校验的权限码
      *
      * @return 需要校验的权限码
+     * 使用@SaSpaceCheckPermission(value = "space:edit")时，等价于@SaCheckPermission(value = "space:edit")
+     * @AliasFor 绑定到SaCheckPermission的value参数
      */
     @AliasFor(annotation = SaCheckPermission.class)
     String[] value() default {};

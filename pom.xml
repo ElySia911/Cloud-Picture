@@ -31,7 +31,7 @@
             <artifactId>mybatis-plus-boot-starter</artifactId>
             <version>3.5.12</version>
         </dependency>
-        <!-- MyBatis Plus 分页插件 -->
+        <!-- MyBatis Plusf分页插件依赖，引入这个依赖的同时，要在下方的dependencyManagement中补充mybatis-plus-bom -->
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-jsqlparser-4.9</artifactId>
@@ -43,6 +43,7 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!--redis管理session库-->
         <dependency>
             <groupId>org.springframework.session</groupId>
             <artifactId>spring-session-data-redis</artifactId>
@@ -69,7 +70,7 @@
         </dependency>
 
 
-        <!-- Sa-Token 权限认证 默认将数据保存在内存，重启会丢失-->
+        <!-- Sa-Token 权限认证 -->
         <dependency>
             <groupId>cn.dev33</groupId>
             <artifactId>sa-token-spring-boot-starter</artifactId>
@@ -83,13 +84,13 @@
             <version>1.39.0</version>
         </dependency>
 
-        <!-- 提供Redis连接池 -->
+        <!-- 提供Redis连接池(提供给Sa-token用) -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
         </dependency>
 
-
+        <!--分库分表-->
         <dependency>
             <groupId>org.apache.shardingsphere</groupId>
             <artifactId>shardingsphere-jdbc-core-spring-boot-starter</artifactId>
@@ -97,7 +98,7 @@
         </dependency>
 
 
-        <!-- HTML 解析：https://jsoup.org/ -->
+        <!--一个HTML文档解析库：https://jsoup.org/ -->
         <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>

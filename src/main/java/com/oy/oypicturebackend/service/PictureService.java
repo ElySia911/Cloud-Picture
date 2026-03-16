@@ -55,7 +55,7 @@ public interface PictureService extends IService<Picture> {
      * @return
      */
     Page<PictureVO> getPictureVOPage(Page<Picture> picturePage, HttpServletRequest request);
-
+//--------------------------------------------------------------------------------------------------------------------------------
     /**
      * 编写图片数据校验方法，用于更新和修改图片时候进行判断
      *

@@ -47,7 +47,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      */
     @Override
     public Long userRegister(String userAccount, String userPassword, String checkPassword) {
-        //1.校验参数，hasBlank判断多个字符串中是否存在一个字符串为 null或""或" "，只要有一个字符串满足其中一个，就返回true，抛出错误
+        //1.校验参数，hasBlank判断多个字符串参数中是否存在一个字符串为 null或""或" "，只要有一个字符串参数满足其中一个，就返回true，抛出错误
         if (StrUtil.hasBlank(userAccount, userPassword, checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
         }
@@ -101,10 +101,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
         }
         if (userAccount.length() < 4) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户账号错误");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户账号或密码错误");
         }
         if (userPassword.length() < 8) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户密码错误");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户账号或密码错误");
         }
         //2.用户的密码加密
         String encryptPassword = getEncryptPassword(userPassword);
@@ -114,15 +114,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         queryWrapper.eq("userPassword", encryptPassword);
         User user = this.baseMapper.selectOne(queryWrapper);
         if (user == null) {
-            log.info("user login failed,userAccount cannot match userPassword");
+            log.info("用户登录失败，用户账户与密码不匹配");
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户不存在或者密码错误");
         }
-        //4.保存用户的登录态，第一次登录的时候，会创建一个Session对象，将用户信息用键值对的形式保存在服务器的Session对象中，以便后续识别“当前登录的用户是谁”，并将唯一的session id返回给浏览器
+        //4.保存用户的登录态：通过用户传递的request的session id，得到对应的session空间，然后 把用户信息设置到session中
         request.getSession().setAttribute(UserConstant.USER_LOGIN_STATE, user);
 
         //记录用户登录态到 Sa-token，便于空间鉴权时使用
-        StpKit.SPACE.login(user.getId());//让当前用户在space体系下登录
-        StpKit.SPACE.getSession().set(UserConstant.USER_LOGIN_STATE, user);//把user对象存到space会话里面
+        StpKit.SPACE.login(user.getId());
+        StpKit.SPACE.getSession().set(UserConstant.USER_LOGIN_STATE, user);// 向space登录体系的Token-Session中存入当前登录用户的完整信息
         return this.getLoginUserVO(user);
     }
 
@@ -141,7 +141,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (currentUser == null || currentUser.getId() == null) {// 根据是否查到session 或 id是否为空来判断，因为前端要根据id是否为空来判断是否登录
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
-        //用户登录后，可能会修改个人的昵称，若是通过上面代码获取的还是之前保存的session，获取的还是没有修改前的用户的昵称，所以要重新去数据库查询一次新的用户信息
+        //用户登录后，可能会修改个人的昵称，若是通过上面代码获取的还是之前保存的session，获取的还是没有修改前的用户的昵称，为了保证获取到的数据是最新的，所以要重新去数据库查询一次新的用户信息
         Long userId = currentUser.getId();
         currentUser = this.getById(userId);
         if (currentUser == null) {
@@ -239,17 +239,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         String userRole = userQueryRequestDTO.getUserRole();
         String sortField = userQueryRequestDTO.getSortField();
         String sortOrder = userQueryRequestDTO.getSortOrder();
-        //用来构建where条件、like、order by等sql语句片段
+        //QueryWrapper是MyBatis-Plus提供的查询条件构造器，用来构建where条件、like、order by等sql语句片段
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         //下面两句是等值查询：isNotNull方法判断id条件是否为空，isNotBlank方法判断userRole是否非空字符串，不为空就添加  where id= ? 方法 或 where userRole = ?
-        queryWrapper.eq(ObjUtil.isNotNull(id), "id", id);
-        queryWrapper.eq(StrUtil.isNotBlank(userRole), "userRole", userRole);
+        queryWrapper.eq(ObjUtil.isNotNull(id), "id", id); // 如果id不为null，则添加 id = ?
+        queryWrapper.eq(StrUtil.isNotBlank(userRole), "userRole", userRole); // 如果userRole不为空字符串，则添加 userRole = ?
         //下面三句是模糊查询：isNotBlank方法判断条件是否为空，不为空就添加  LIKE 条件（用于模糊搜索）
-        queryWrapper.like(StrUtil.isNotBlank(userAccount), "userAccount", userAccount);
+        queryWrapper.like(StrUtil.isNotBlank(userAccount), "userAccount", userAccount); // 如果userAccount不为空字符串，则添加 userAccount LIKE '%张三%'
         queryWrapper.like(StrUtil.isNotBlank(userName), "userName", userName);
         queryWrapper.like(StrUtil.isNotBlank(userProfile), "userProfile", userProfile);
         //下面这一句判断是否指定了排序字段（sortField 非空），然后根据 sortOrder（排序规则） 是否为 "ascend" 来决定是升序还是降序
-        queryWrapper.orderBy(StrUtil.isNotBlank(sortField), sortOrder.equals("ascend"), sortField);//ascend是升序 descen是降序
+        queryWrapper.orderBy(StrUtil.isNotBlank(sortField), sortOrder.equals("ascend"), sortField);//ascend是升序 descen是降序，sortField是要进行排序的字段
         return queryWrapper;//返回查询器
     }
 

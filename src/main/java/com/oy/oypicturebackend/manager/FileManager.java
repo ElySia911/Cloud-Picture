@@ -34,7 +34,8 @@ import java.net.URL;
 import java.util.*;
 
 /**
- * 这个类是一个比CosManager类更贴近项目业务的服务类，主要的业务是进行文件上传并返回图片解析信息的方法
+ * 这个类相比CosManager类来说，稍微和业务有点关系，但并没有完全和业务绑死，因此也是可以在其他项目复用的
+ * 主要的业务是进行文件上传并返回图片解析信息的方法
  */
 @Slf4j
 @Service
@@ -56,32 +57,26 @@ public class FileManager {
     public UploadPictureResult uploadPicture(MultipartFile multipartFile, String uploadPathPrefix) {
         //校验图片
         validPicture(multipartFile);
-        //生成16位随机字符串作为uuid，用于保证文件名唯一性
-        String uuid = RandomUtil.randomString(16);
-        //获取前端上传文件的原始文件名
-        String originalFilename = multipartFile.getOriginalFilename();
+        String uuid = RandomUtil.randomString(16);//生成16位随机字符串作为uuid，用于保证文件名唯一性
+        String originalFilename = multipartFile.getOriginalFilename();//获取前端上传文件的原始文件名，包括文件名和后缀
 
-        //生成唯一文件名：格式为“当前日期_uuid.文件后缀”，确保文件名不重复
-        //format方法是字符串格式化方法，可以用占位符%s %d等把多个变量拼接成一个有格式的字符串
+        //生成唯一的上传文件名：格式为“当前日期_uuid.文件后缀”，确保文件名不重复，format方法是字符串格式化方法，可以用占位符%s %d等把多个变量拼接成一个有格式的字符串
         String uploadFileName = String.format(
                 "%s_%s.%s",
                 DateUtil.formatDate(new Date()),
                 uuid,
-                FileUtil.getSuffix(originalFilename));//获取原始文件的后缀
-
-        //生成上传到COS的完整路径（key） ：格式为“/路径前缀/文件名”
+                FileUtil.getSuffix(originalFilename));//获取原始文件名的后缀
+        //生成上传到COS的完整路径（key） ：格式为“/路径前缀/上传文件名”
         String uploadFilePath = String.format("/%s/%s", uploadPathPrefix, uploadFileName);
 
         File file = null;
         try {
-            //创建临时文件，用上传地址作为文件名前缀，后缀为null
-            file = File.createTempFile(uploadFilePath, null);
-            // 将MultipartFile类型的文件转换为File类型并写入临时文件
-            multipartFile.transferTo(file);
-            //调用CosManager的putObject方法上传文件到COS，返回上传结果
+            file = File.createTempFile(uploadFilePath, null);// 创建一个临时文件，createTempFile接收两个参数，第一个是文件名前缀，第二个是文件名后缀，这里用uploadFilePath做前缀，后缀为null
+            multipartFile.transferTo(file);//将前端上传的MultipartFile内容写入到刚才的临时文件中，此时临时文件就和前端上传的文件内容一致，因为腾讯云COS的上传方法需要接收File类型的参数
+            //调用CosManager的putPictureObject方法上传文件到COS，生成三张图片，返回了上传结果
             PutObjectResult putObjectResult = cosManager.putPictureObject(uploadFilePath, file);
 
-            //从上传结果中获取图片信息对象（包含宽、高、格式等信息）
+            //从上传结果中获取原始图片信息对象（包含宽、高、格式等信息）
             ImageInfo imageInfo = putObjectResult.getCiUploadResult().getOriginalInfo().getImageInfo();
             System.out.println(imageInfo);
             //提取图片宽度
@@ -93,7 +88,7 @@ public class FileManager {
 
             //创建上传图片结果对象，当图片上传完并返回上传结果之后就会用这个类来接收
             UploadPictureResult uploadPictureResult = new UploadPictureResult();
-            //设置图片可访问URL（COS主机地址+上传路径）
+            //设置图片可访问URL（COS主机地址+上传的完整路径）
             uploadPictureResult.setUrl(cosClientConfig.getHost() + "/" + uploadFilePath);
             //设置图片名称，mainName是将原始文件名的后缀去掉后返回
             uploadPictureResult.setPicName(FileUtil.mainName(originalFilename));
@@ -118,7 +113,6 @@ public class FileManager {
         }
 
     }
-
 
     /**
      * 校验图片规则，对大小、类型进行校验
@@ -151,6 +145,23 @@ public class FileManager {
 
     }
 
+    /**
+     * 删除临时文件
+     *
+     * @param file
+     */
+    private void deleteTempFile(File file) {
+        if (file == null) {//若文件对象为空，直接返回
+            return;
+        }
+        // 删除临时文件
+        boolean deleteResult = file.delete();
+        if (!deleteResult) {
+            log.error("file delete error, filepath = {}", file.getAbsolutePath());
+        }
+    }
+
+//----------------------------------------------------------------------------------------------------------------------
 
     /**
      * 通过url上传图片
@@ -164,8 +175,7 @@ public class FileManager {
         validPicture(fileUrl);
         //生成16位随机字符串作为uuid，用于保证文件名唯一性
         String uuid = RandomUtil.randomString(16);
-
-        String originalFilename = FileUtil.mainName(fileUrl);
+        String originalFilename = FileUtil.mainName(fileUrl); // 提取出去除扩展名后的文件名
 
         //生成唯一文件名：格式为“当前日期_uuid.文件后缀”，确保文件名不重复
         //format方法是字符串格式化方法，可以用占位符%s %d等把多个变量拼接成一个有格式的字符串
@@ -174,19 +184,15 @@ public class FileManager {
                 DateUtil.formatDate(new Date()),
                 uuid,
                 FileUtil.getSuffix(originalFilename));//获取原始文件的后缀
-
         //生成上传到COS的完整路径（key） ：格式为“/路径前缀/文件名”
         String uploadFilePath = String.format("/%s/%s", uploadPathPrefix, uploadFileName);
 
         File file = null;
-
         try {
-            //创建临时文件
-            file = File.createTempFile(uploadFilePath, null);
-            HttpUtil.downloadFile(fileUrl, file);
+            file = File.createTempFile(uploadFilePath, null);// 创建一个临时文件，createTempFile接收两个参数，第一个是文件名前缀，第二个是文件名后缀，这里用uploadFilePath做前缀，后缀为null
+            HttpUtil.downloadFile(fileUrl, file);//从指定的网络url下载内容到临时文件
 
             PutObjectResult putObjectResult = cosManager.putPictureObject(uploadFilePath, file);
-
             //从上传结果中获取图片信息对象（包含宽、高、格式等信息）
             ImageInfo imageInfo = putObjectResult.getCiUploadResult().getOriginalInfo().getImageInfo();
             System.out.println(imageInfo);
@@ -225,43 +231,36 @@ public class FileManager {
         }
     }
 
-
     /**
      * 根据url校验文件规则，对大小、类型进行校验
      *
      * @param fileUrl
      */
     private void validPicture(String fileUrl) {
-        //校验非空
         ThrowUtils.throwIf(StrUtil.isBlank(fileUrl), ErrorCode.PARAMS_ERROR, "文件地址不能为空");
-
         //校验URL格式
         try {
-            URL url = new URL(fileUrl);//验证是否合法的url
+            URL url = new URL(fileUrl);//尝试将 fileUrl 解析为 Java 标准的 URL 对象
         } catch (MalformedURLException e) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件地址格式不正确");
         }
-
         //校验URL协议
         ThrowUtils.throwIf(!fileUrl.startsWith("http://") && !fileUrl.startsWith("https://"), ErrorCode.PARAMS_ERROR, "仅支持HTTP或HTTPS协议的文件地址");
-
-
-        //发送HEAD请求验证文件是否存在，使用HEAD请求会返回响应头，常用于检查文件是否存在（通过状态码判断） 获取文件大小 类型 等等
+        //发送HEAD请求验证文件是否存在，使用HEAD请求会返回响应头，不下载文件内容，能大幅减少网络传输量
         HttpResponse httpResponse = null;
         try {
             httpResponse = HttpUtil.createRequest(Method.HEAD, fileUrl).execute();
             if (httpResponse.getStatus() != HttpStatus.HTTP_OK) {
-                //检查返回的状态码是不是OK ，若不是，未正常返回，直接return
+                //校验HTTP响应状态码：仅200（OK）表示地址可访问
                 return;
             }
-            //文件存在，文件类型校验
+            //校验文件类型：通过响应头 Content-Type 判断是否为允许的图片类型
             String contentType = httpResponse.header("Content-Type");
             if (StrUtil.isNotBlank(contentType)) {
-                //允许的图片类型
                 final List<String> ALLOW_CONTENT_TYPES = Arrays.asList("image/jpeg", "image/jpg", "image/png", "image/webp");
                 ThrowUtils.throwIf(!ALLOW_CONTENT_TYPES.contains(contentType.toLowerCase()), ErrorCode.PARAMS_ERROR, "文件类型错误");
             }
-            //文件大小校验
+            //校验文件大小：通过响应头 Content-Length 判断是否超过2MB
             String contentLengthStr = httpResponse.header("Content-Length");
             if (StrUtil.isNotBlank(contentLengthStr)) {
                 try {
@@ -281,19 +280,4 @@ public class FileManager {
     }
 
 
-    /**
-     * 删除临时文件
-     *
-     * @param file
-     */
-    private void deleteTempFile(File file) {
-        if (file == null) {//若文件对象为空，直接返回
-            return;
-        }
-        // 删除临时文件
-        boolean deleteResult = file.delete();
-        if (!deleteResult) {
-            log.error("file delete error, filepath = {}", file.getAbsolutePath());
-        }
-    }
 }

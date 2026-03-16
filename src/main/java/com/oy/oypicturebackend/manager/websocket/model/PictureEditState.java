@@ -4,6 +4,6 @@ import lombok.Data;
 
 @Data
 public class PictureEditState {
-    private int rotation;//旋转角度
-    private double scale;//缩放比例
+    private int rotation = 0;//旋转角度
+    private int scale = 0;//缩放次数
 }

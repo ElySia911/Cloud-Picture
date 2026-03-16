@@ -26,7 +26,7 @@ public enum UserRoleEnum {
     }
 
     /**
-     * 根据value获取枚举常量
+     * 根据value获取枚举
      *
      * @param value 枚举值的value
      * @return 枚举值

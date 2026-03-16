@@ -19,9 +19,7 @@ public class StpKit {
 
 
     /**
-     * Space会话对象，管理Space表所有账号的登录，权限认证
-     * StpKit.SPACE.CheckLogin(); // 检查用户是否登录
-     * StpKit.SPACE.CheckPermissions();//检查用户是否有权限
+     * Space 会话对象，管理Space表所有账户的登录、权限认证等。例：StpKit.SPACE.login(10001)
      */
     public static final StpLogic SPACE = new StpLogic(SPACE_TYPE);// 空间会话对象，管理Space表所有账号的登录，权限认证
 

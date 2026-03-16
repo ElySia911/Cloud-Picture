@@ -6,7 +6,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
- * 创建AI拓图任务请求类，用于接收前端传来的参数并传递给Serivice服务层
+ * 创建AI拓图任务请求类
  */
 @Data
 public class CreatePictureOutPaintingTaskRequestDTO implements Serializable {

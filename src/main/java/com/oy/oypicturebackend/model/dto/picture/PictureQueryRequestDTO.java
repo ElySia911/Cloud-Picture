@@ -8,7 +8,7 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * 用户查询图片请求DTO
+ * 用户查询图片请求DTO，继承了公共包中的PageRequest支持分页查询，想根据什么查，就加什么字段就行
  */
 @Data
 public class PictureQueryRequestDTO extends PageRequest implements Serializable {
@@ -92,22 +92,16 @@ public class PictureQueryRequestDTO extends PageRequest implements Serializable 
      */
     private Date reviewTime;
 
-    /**
-     * 空间id
-     */
+    //空间id
     private Long spaceId;
 
-    /**
-     * 是否只查询spaceId为null的数据
-     */
+    //是否只查询spaceId为空的数据
     private boolean nullSpaceId;
-
-    /*为什么需要nullSpaceId字段：
-     * 当 spaceId = null 且 nullSpaceId = true：表示用户明确要查公共图库（只返回 spaceId = null 的图片
-     *当 spaceId = null 且 nullSpaceId = false：表示用户未指定空间（可能想查所有可见图片，具体逻辑由业务定义）
-     *
-     * */
-
+    /*只靠spaceId一个字段，是无法实现只查询公开图片的，因为不填spaceId，数据库就默认是查询整个图片表，
+      填了spaceId，就查询指定空间的图片，无法做到查询公开的图片
+      所以需要添加nullSpaceId字段，通过 true/false 来判断是否只查询spaceId为空的数据
+      当设置nullSpaceId=true时，SQL是SELECT * FROM image WHERE 1=1 AND space_id IS NULL → 精准查询仅公开的图片
+    */
 
     /**
      * 开始编辑时间

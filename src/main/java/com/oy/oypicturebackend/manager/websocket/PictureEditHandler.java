@@ -18,6 +18,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import javax.annotation.Resource;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,44 +38,69 @@ public class PictureEditHandler extends TextWebSocketHandler {
 
     //WebSocket是多用户并发连接，用线程安全的ConcurrentHashMap可以避免出现多用户同时抢占图片的编辑权
 
-    // 每张图片的编辑状态，key：pictureId  value：当前正在编辑的用户Id 。相当于 图片-编辑者的映射表。
+    // 每张图片的编辑者，key：pictureId  value：当前正在编辑的用户Id 。相当于 图片-编辑者的映射表。
     private final Map<Long, Long> pictureEditingUsers = new ConcurrentHashMap<>();
 
     //保存所有连接到具体某张图片的会话，key: pictureId, value: 用户会话集合。相当于 图片-观察者连接的映射表
     private final Map<Long, Set<WebSocketSession>> pictureSessions = new ConcurrentHashMap<>();
 
+    //图片历史编辑操作，用于给新加入的会话推送图片的最新状态
+    private static final Map<Long, List<String>> pictureActionMap = new ConcurrentHashMap<>();
+
 
     //----------------------------------------------------------------------------------------------
 
 
-    //建立连接成功之后要做的事情
+    //建立连接成功之后要做的事情（即打开编辑弹窗组件）（存会话进map然后广播）
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         super.afterConnectionEstablished(session);
         //保存会话到集合中
         User user = (User) session.getAttributes().get("user");//getAttributes是获取WebSocket连接的“属性集合”
         Long pictureId = (Long) session.getAttributes().get("pictureId");
-        pictureSessions.putIfAbsent(pictureId, ConcurrentHashMap.newKeySet());//如果pictureId对应的集合不存在，则创建一个空的集合
-        pictureSessions.get(pictureId).add(session);
+        pictureSessions.putIfAbsent(pictureId, ConcurrentHashMap.newKeySet());//如果pictureId对应的会话集合不存在，则创建一个pictureId对应的空的set集合
+        pictureSessions.get(pictureId).add(session);//然后往这个pictureId对应的set集合中添加当前会话
         //构造响应，发送某某某加入编辑的消息通知
         PictureEditResponseMessage pictureEditResponseMessage = new PictureEditResponseMessage();
         pictureEditResponseMessage.setType(PictureEditMessageTypeEnum.INFO.getValue());
         String message = String.format("用户%s加入了编辑", user.getUserName());
         pictureEditResponseMessage.setMessage(message);
         pictureEditResponseMessage.setUserVO(userService.getUserVO(user));
-        //将响应广播 给所有连接到该图片的会话
+        //将响应 广播给所有连接到该图片的会话
         broadcastToPicture(pictureId, pictureEditResponseMessage);
+
+        //--------------------------------------------------------
+        //给新加入的会话，推送图片的最新状态
+        List<String> actions = pictureActionMap.get(pictureId);
+        if (actions != null && !actions.isEmpty()) {
+            PictureEditResponseMessage syncMessage = new PictureEditResponseMessage();
+            syncMessage.setType(PictureEditMessageTypeEnum.SYNC_STATE.getValue());
+            syncMessage.setUserVO(userService.getUserVO(user));
+            syncMessage.setMessage("向客户端推送图片执行步骤");
+            syncMessage.setActions(actions);
+            System.out.println("发送给新用户的图片执行步骤=" + actions);
+
+            ObjectMapper objectMapper = new ObjectMapper();
+            SimpleModule simpleModule = new SimpleModule();
+            simpleModule.addSerializer(Long.class, ToStringSerializer.instance);
+            simpleModule.addSerializer(Long.TYPE, ToStringSerializer.instance);
+            objectMapper.registerModule(simpleModule);
+
+            if (session.isOpen()) {
+                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(syncMessage)));
+            }
+        }
     }
 
 
-    //收到客户端消息之后，根据消息类别执行不同的处理
+    //收到客户端消息之后，调用Disruptor，根据消息类别执行不同的处理
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         super.handleTextMessage(session, message);
-        //获取消息内容，将消息解析为PictureEditMessage
+        //获取消息内容，将JSON转换为为PictureEditMessage
         PictureEditRequestMessage pictureEditRequestMessage = JSONUtil.toBean(message.getPayload(), PictureEditRequestMessage.class);//getPayload是获取客户端发来的原始文本内容
 
-        //获取当前会话的属性
+        //获取当前会话的属性集合
         Map<String, Object> attributes = session.getAttributes();
         User user = (User) attributes.get("user");
         Long pictureId = (Long) attributes.get("pictureId");
@@ -87,7 +113,7 @@ public class PictureEditHandler extends TextWebSocketHandler {
     //处理加入编辑状态
     public void handleEnterEditMessage(PictureEditRequestMessage pictureEditRequestMessage, WebSocketSession session, User user, Long pictureId) throws Exception {
         //没有用户正在编辑该图片，才能进入编辑
-        ////putIfAbsent方法，如果pictureId对应的value不存在，则将user.getId()赋值给pictureId对应的value，并返回null；如果pictureId对应的value已经存在，则返回pictureId对应的value
+        //putIfAbsent方法：检查是否有pictureId这个key，若没有，把key和value存进map，并返回调用putIfAbsent方法前key对应的值，由于调用前没有这个key，所以值是null。若有，则返回该key对应的value
         Long editingUserId = pictureEditingUsers.putIfAbsent(pictureId, user.getId());
         if (editingUserId == null) {
             PictureEditResponseMessage pictureEditResponseMessage = new PictureEditResponseMessage();
@@ -127,9 +153,12 @@ public class PictureEditHandler extends TextWebSocketHandler {
             log.error("无效的编辑动作");
             return;
         }
-        //如果当前用户是正在编辑的用户，则执行编辑操作
+
+        //如果当前用户是正在编辑的用户，则将操作存进全局状态，并广播给前端执行编辑操作
         if (editingUserId != null && editingUserId.equals(user.getId())) {
 
+            /*pictureId不存在--->创建一个新的List，如果存在，直接拿已有的，然后add(editAction)*/
+            pictureActionMap.computeIfAbsent(pictureId, k -> new ArrayList<>()).add(editAction);
 
             //构造响应，发送某某某执行了某某某操作的消息通知
             PictureEditResponseMessage pictureEditResponseMessage = new PictureEditResponseMessage();
@@ -172,11 +201,11 @@ public class PictureEditHandler extends TextWebSocketHandler {
         //删除会话
         Set<WebSocketSession> sessionSet = pictureSessions.get(pictureId);//获取该图片下的所有会话集合
         if (sessionSet != null) {
-            sessionSet.remove(session);//移除当前会话
-            //如果该图片的集合下没有会话了，则从Map集合中移除这个图片id的key
+            sessionSet.remove(session);//会话集合中移除当前会话
+            //如果该图片的集合下没有会话了，则从Map集合中移除这个图片id的key，并从历史Map移除这个图片的历史操作
             if (sessionSet.isEmpty()) {
                 pictureSessions.remove(pictureId);
-
+                pictureActionMap.remove(pictureId);
             }
         }
 
@@ -202,14 +231,14 @@ public class PictureEditHandler extends TextWebSocketHandler {
      * @throws Exception
      */
     private void broadcastToPicture(Long pictureId, PictureEditResponseMessage pictureEditResponseMessage, WebSocketSession excludeSession) throws Exception {
-        //拿到当前连接到该图片的所有会话
+        //拿到当前连接到该图片的所有会话集合
         Set<WebSocketSession> sessionSet = pictureSessions.get(pictureId);
 
         if (CollUtil.isNotEmpty(sessionSet)) {
 
             ObjectMapper objectMapper = new ObjectMapper();//创建Jackson的JSON处理对象，负责Java对象和JSON的互相转换，即一个转换器
-            SimpleModule module = new SimpleModule();//用于拓展转换器的序列化功能
-            //给Long类型和long基本类型注册序列化器：将他们转成字符串，解决前端JS丢失精度的问题
+            SimpleModule module = new SimpleModule();//创建一个自定义的序列化模块，用于拓展转换器的序列化功能
+            //给Long类型和long基本类型指定使用哪一种序列化器：将他们转成字符串，解决前端JS丢失精度的问题
             module.addSerializer(Long.class, ToStringSerializer.instance);
             module.addSerializer(Long.TYPE, ToStringSerializer.instance);
             objectMapper.registerModule(module);//把自定义的序列化器进行注册

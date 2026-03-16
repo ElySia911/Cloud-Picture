@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 将本地文件进行上传，继承父类模板
+ * 文件图片进行上传，继承父类模板
  */
 @Service
 public class FilePictureUpload extends PictureUploadTemplate {
@@ -21,10 +21,10 @@ public class FilePictureUpload extends PictureUploadTemplate {
     //校验输入源  步骤：转MultipartFile；判空；限制大小；限制后缀
     @Override
     protected void validPicture(Object inputSource) {
-        //输入源 转换为 文件类型
+        //输入源 转换为MultipartFile类型
         MultipartFile multipartFile = (MultipartFile) inputSource;
         ThrowUtils.throwIf(multipartFile == null, ErrorCode.PARAMS_ERROR, "文件不能为空");
-        //不为空则校验文件大小
+        //校验文件大小
         long fileSize = multipartFile.getSize();
         ThrowUtils.throwIf(fileSize > MAX_SIZE, ErrorCode.PARAMS_ERROR, "文件大小不能超过2MB");
         //校验文件后缀
@@ -50,6 +50,6 @@ public class FilePictureUpload extends PictureUploadTemplate {
     @Override
     protected void processFile(Object inputSource, File file) throws Exception {
         MultipartFile multipartFile = (MultipartFile) inputSource;
-        multipartFile.transferTo(file);
+        multipartFile.transferTo(file);//将输入源的内容（字节流）写入到本地临时文件
     }
 }

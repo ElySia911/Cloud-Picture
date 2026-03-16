@@ -30,31 +30,30 @@ public class UrlPictureUpload extends PictureUploadTemplate {
         //输入源转换成String类型
         String fileUrl = (String) inputSource;
         ThrowUtils.throwIf(StrUtil.isBlank(fileUrl), ErrorCode.PARAMS_ERROR, "文件地址不能为空");
-        //不为空就校验Url格式
+        //校验Url格式
         try {
-            URL url = new URL(fileUrl);
+            URL url = new URL(fileUrl);//尝试将 fileUrl 解析为 Java 标准的 URL 对象
         } catch (MalformedURLException e) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件地址格式不正确");
         }
         //校验Url协议
         ThrowUtils.throwIf(!fileUrl.startsWith("http://") && !fileUrl.startsWith("https://"), ErrorCode.PARAMS_ERROR, "仅支持HTTP或HTTPS协议的文件地址");
-        //发送HEAD请求验证文件是否存在，使用HEAD请求会返回响应头，常用于检查文件是否存在（通过状态码判断） 获取文件大小 类型 等等
+        //发送HEAD请求验证文件是否存在，使用HEAD请求会返回响应头，不下载文件内容，能大幅减少网络传输量
         HttpResponse httpResponse = null;
         try {
-            //创建请求，使用HEAD方式请求
             httpResponse = HttpUtil.createRequest(Method.HEAD, fileUrl).execute();
-            //如果响应结果的状态码不等于OK（200）
+            //校验HTTP响应状态码：仅200（OK）表示地址可访问
             if (httpResponse.getStatus() != HttpStatus.HTTP_OK) {
                 return;
             }
-            //校验文件类型
+            //校验文件类型：通过响应头 Content-Type 判断是否为允许的图片类型
             String contentType = httpResponse.header("Content-Type");
             if (StrUtil.isNotBlank(contentType)) {
                 //允许的图片类型
                 final List<String> ALLOW_CONTENT_TYPES = Arrays.asList("image/jpeg", "image/jpg", "image/png", "image/webp");
                 ThrowUtils.throwIf(!ALLOW_CONTENT_TYPES.contains(contentType.toLowerCase()), ErrorCode.PARAMS_ERROR, "文件类型错误");
             }
-            //文件大小校验
+            //校验文件大小：通过响应头 Content-Length 判断是否超过2MB
             String contentLengthStr = httpResponse.header("Content-Length");
             if (StrUtil.isNotBlank(contentLengthStr)) {
                 try {
@@ -77,8 +76,9 @@ public class UrlPictureUpload extends PictureUploadTemplate {
     @Override
     protected String getOriginalFilename(Object inputSource) {
         String fileUrl = (String) inputSource;
-        //String cleanUrl = fileUrl.split("\\?")[0]; // 去掉 ? 及后面的参数
-        String originalFilename = FileUtil.getName(fileUrl);//使用getName才能拿到带后缀的文件名
+        String cleanUrl = fileUrl.split("\\?")[0]; // 去掉 ? 及后面的参数，因为AI扩图之后返回的图片url中带有?及参数
+        //String originalFilename = FileUtil.getName(fileUrl);//使用getName才能拿到带后缀的文件名
+        String originalFilename = FileUtil.getName(cleanUrl);//使用getName才能拿到带后缀的文件名
         return originalFilename;
     }
 

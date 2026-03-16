@@ -20,7 +20,7 @@ public class SpaceUsageAnalyzeResponse implements Serializable {
     private Long maxSize;
 
     /**
-     * 空间使用比例
+     * 空间容量使用比例
      */
     private Double sizeUsageRatio;
 

@@ -29,7 +29,7 @@ public class PictureEditByBatchRequestDTO implements Serializable {
      */
     private List<String> tags;
     /**
-     * 命令规则
+     * 命名规则
      */
     private String nameRule;
 

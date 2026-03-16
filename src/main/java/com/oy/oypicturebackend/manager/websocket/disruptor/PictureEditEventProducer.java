@@ -22,17 +22,18 @@ public class PictureEditEventProducer {
 
     //往队列里发布事件
     public void publishEvent(PictureEditRequestMessage pictureEditRequestMessage, WebSocketSession webSocketSession, User user, Long pictureId) {
-        //获取到缓冲区
+        //获取Disruptor的缓冲区
         RingBuffer<PictureEditEvent> ringBuffer = pictureEditEventDisruptor.getRingBuffer();
-        //获取下一个可以放事件的槽位序号
+        //获取下一个可以放事件的槽位序号（原子操作）
         long next = ringBuffer.next();
-        //获取到该槽位的事件对象
-        PictureEditEvent pictureEditEvent = ringBuffer.get(next);//空的
-        pictureEditEvent.setPictureEditRequestMessage(pictureEditRequestMessage);
+        //根据序号获取预创建的空事件对象
+        PictureEditEvent pictureEditEvent = ringBuffer.get(next);
+        //给空事件填充业务数据
+        pictureEditEvent.setPictureEditRequestMessage(pictureEditRequestMessage);//将前端发来的'图片编辑请求消息'填充给'图片编辑事件'
         pictureEditEvent.setSession(webSocketSession);
         pictureEditEvent.setUser(user);
         pictureEditEvent.setPictureId(pictureId);
-        ringBuffer.publish(next);
+        ringBuffer.publish(next);//发布事件
     }
 
     //停机，作用是在服务关闭时，确保队列里的所有任务都处理完再关闭，避免任务丢失

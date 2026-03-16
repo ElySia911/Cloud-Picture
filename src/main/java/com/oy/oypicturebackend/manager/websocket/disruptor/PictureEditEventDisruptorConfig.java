@@ -23,7 +23,7 @@ public class PictureEditEventDisruptorConfig {
 
         //创建Disruptor实例
         Disruptor<PictureEditEvent> disruptor = new Disruptor<>(
-                PictureEditEvent::new,//事件工厂，即告诉Disruptor要处理的事件是什么类型，提前创建好对象，目前是空的
+                PictureEditEvent::new,//事件工厂，即告诉Disruptor要处理的事件是什么类型，启动时，Disruptor在Ring Buffer的每个位置预创建了空的PictureEditEvent对象
                 bufferSize,//缓冲区大小
                 ThreadFactoryBuilder.create()//线程工厂
                         .setNamePrefix("pictureEditEventDisruptor")//线程名称前缀

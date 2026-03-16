@@ -26,7 +26,7 @@ public class SpaceAnalyzeController {
     private UserService userService;
 
     /**
-     * 获取空间的 资源使用 状态
+     * 获取空间资源的使用情况
      *
      * @param spaceUsageAnalyzeRequestDTO
      * @return

@@ -42,7 +42,6 @@ public class UserController {
     @PostMapping("/register")
     public BaseResponse<Long> userRegister(@RequestBody UserRegisterRequestDTO userRegisterRequestDTO) {
         ThrowUtils.throwIf(userRegisterRequestDTO == null, ErrorCode.PARAMS_ERROR);
-
         String userAccount = userRegisterRequestDTO.getUserAccount();
         String userPassword = userRegisterRequestDTO.getUserPassword();
         String checkPassword = userRegisterRequestDTO.getCheckPassword();

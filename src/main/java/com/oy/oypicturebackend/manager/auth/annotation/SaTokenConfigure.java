@@ -18,29 +18,25 @@ public class SaTokenConfigure implements WebMvcConfigurer {//实现WebMvcConfigu
     // 注册 Sa-Token 拦截器，打开注解式鉴权功能
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // 往Spring MVC里面注册一个 Sa-Token 拦截器
+        // 注册Sa-Token的拦截器（SaInterceptor）到Spring容器，指定拦截范围：/** 代表拦截项目中所有的请求
         registry.addInterceptor(new SaInterceptor()).addPathPatterns("/**");
-        //new SaInterceptor():创建Sa-Token框架的拦截器实例
-        //.addPathPatterns("/**"):表示对项目中所有接口路径（/**代表所有路径）都生效
-        //简单来说，没有这句代码的话，在接口上写的Sa-Token注解不会起作用
     }
 
 
     //增强注解识别能力
-    @PostConstruct//在Spring创建好这个配置类对象之后，立刻执行这个方法
+    @PostConstruct//Spring初始化当前类后立即执行这个方法
     public void rewriteSaStrategy() {
         // 重写Sa-Token的注解处理器，增加注解合并功能 
         SaAnnotationStrategy.instance.getAnnotation = (element, annotationClass) -> {
+            //element：要解析的目标（比如方法、类）  annotationClass：要解析的注解类型
+
+            //用Spring的AnnotatedElementUtils.getMergedAnnotation替换原生逻辑
+            //不仅找当前element上的注解，还会找到继承/组合的注解，实现注解合并
             return AnnotatedElementUtils.getMergedAnnotation(element, annotationClass);
         };
     }
 
-    /*
-        原来Sa-Token默认只能识别自己的官方注解，即写在接口上的注解（比如接口上直接标官方的 @SaCheckLogin），但对于包含了官方注解的自定义注解识别能力有限
-        重写之后，能识别组合注解：比如自定义的一个 @SaSpaceCheckPermission注解 ，然后在@SaSpaceCheckPermission里面包含@SaCheckLogin,这时Sa-Token也能识别出这是需要检查登录的
-        AnnotatedElementUtils.getMergedAnnotation是 Spring 提供的工具，专门用来处理这种 "注解套注解" 的情况， 能 "穿透" 自定义注解，识别到里面包含的官方注解
-
-     */
-
-
+    /*SaToken原生的注解解析能力有限，只能解析当前类或当前方法直接标注的注解，无法识别继承/组合的注解
+    例如：标注在父类方法上的注解，子类继承后调用父类方法，注解不生效 或者 自定义一个组合注解，原生的SaToken解析不到自定义注解里面嵌套的Satoken注解
+    所以重写getAnnotation方法，用spring的getMergedAnnotation替换掉satoken原生的解析注解的逻辑*/
 }

@@ -2,7 +2,8 @@ package com.oy.oypicturebackend.common;
 
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
-import com.oy.oypicturebackend.config.OssConfig;
+import com.aliyun.oss.model.PutObjectResult;
+import com.oy.oypicturebackend.config.OssClientConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,7 +14,7 @@ import java.util.UUID;
 @Component
 public class OssUtil {
     @Autowired
-    private OssConfig ossConfig;
+    private OssClientConfig ossConfig;
 
     public String uploadFile(MultipartFile file) {
         String endpoint = ossConfig.getEndpoint();
@@ -31,7 +32,7 @@ public class OssUtil {
             String originalFilename = file.getOriginalFilename();
             String fileName = "avatar/" + UUID.randomUUID() + "-" + originalFilename;
             //上传到oss
-            ossClient.putObject(bucketName, fileName, inputStream);
+            PutObjectResult putObjectResult = ossClient.putObject(bucketName, fileName, inputStream);
             //返回上传后的文件URL
             return "https://" + bucketName + "." + endpoint + "/" + fileName;
         } catch (Exception e) {

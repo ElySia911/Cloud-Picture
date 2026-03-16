@@ -12,18 +12,11 @@ import java.util.List;
 @Data
 public class SpaceUserAuthConfig implements Serializable {
 
-
-    /**
-     * 权限列表，权限类，对应JSON文件中的第一个元素
-     */
+    //权限列表，权限类，对应JSON文件中的第一个元素
     private List<SpaceUserPermission> permissions;
 
-
-    /**
-     * 角色列表，角色类，对应JSON文件中第二个元素
-     */
+    //角色列表，角色类，对应JSON文件中第二个元素
     private List<SpaceUserRole> roles;
-
 
     private static final long serialVersionUID = 1L;
 }

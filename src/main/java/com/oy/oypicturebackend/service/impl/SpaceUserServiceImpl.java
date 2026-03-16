@@ -136,29 +136,29 @@ public class SpaceUserServiceImpl extends ServiceImpl<SpaceUserMapper, SpaceUser
                 .map(SpaceUserVO::objToVo)//对列表中每个元素都执行objToVo方法，最终返回一个新的列表
                 .collect(Collectors.toList());
 
-        //收集需要关联查询的用户id和空间id，用Set存起来
+        //从 spaceUserList列表中收集需要关联查询的用户id和空间id，用Set存起来
         Set<Long> userIdSet = spaceUserList.stream()
-                .map(SpaceUser::getUserId)//对列表中每个元素执行getUserId方法，获取每个元素的userId字段的值，最终返回一个新的Set列表
+                .map(SpaceUser::getUserId)//对列表中每个元素执行getUserId方法
                 .collect(Collectors.toSet());
         Set<Long> spaceIdSet = spaceUserList.stream()
-                .map(SpaceUser::getSpaceId)//对列表中每个元素执行getSpaceId方法，获取每个元素的spaceId字段的值，最终返回一个新的Set列表
+                .map(SpaceUser::getSpaceId)//对列表中每个元素执行getSpaceId方法
                 .collect(Collectors.toSet());
 
-        //批量查询用户，使用了 stream的collect方法，将查询结果收集为Map，key为用户id，value为用户对象。groupingBy方法将查询结果按用户id分组
+        //调用listByIds方法，批量查询所有用户和所有空间信息，然后通过stream流，按照userId和spaceId进行分组为Map
+        // 每个 key 对应的 value 是 “只有一个元素的列表”
         Map<Long, List<User>> userIdUserListMap = userService.listByIds(userIdSet).stream()
                 .collect(Collectors.groupingBy(User::getId));
-        //批量查询空间
         Map<Long, List<Space>> spaceIdSpaceListMap = spaceService.listByIds(spaceIdSet).stream()
                 .collect(Collectors.groupingBy(Space::getId));
 
-        //填充SpaceUserVO的用户和空间信息 此处的spaceUserVo是List<SpaceUserVO>中的每一个对象，类型是SpaceUserVO
+        //给每个 SpaceUserVO 填充用户详情和空间详情
         spaceUserVOList.forEach(spaceUserVO -> {
             Long userId = spaceUserVO.getUserId();
             Long spaceId = spaceUserVO.getSpaceId();
             //填充用户信息
             User user = null;
             if (userIdUserListMap.containsKey(userId)) {
-                user = userIdUserListMap.get(userId).get(0);
+                user = userIdUserListMap.get(userId).get(0);//取key为userId的value列表的第一个元素（列表中只会有一个元素）
             }
             spaceUserVO.setUser(userService.getUserVO(user));
             //填充空间信息

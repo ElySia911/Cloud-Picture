@@ -11,8 +11,6 @@ import java.io.IOException;
 
 /**
  * 请求包装过滤器 （AI提供的样板代码）
- *
- * @author pine
  */
 @Order(1)
 @Component

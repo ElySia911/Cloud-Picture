@@ -14,7 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Slf4j
-@Component//交给Spring管理，自动new一个
+@Component//被spring管理，加了这个注解后，@Value才能生效
 public class AliYunAiApi {
 
     //读取阿里云ai配置
@@ -42,7 +42,7 @@ public class AliYunAiApi {
                 //必须开启异步处理设置为enable
                 .header("X-DashScope-Async", "enable")
                 .header("Content-Type", "application/json")
-                //使用Hutool工具类转换为json
+                //使用Hutool工具类转换为json，因为DTO中的字段是使用了hutool工具类的@Alias注解，所以转换后json中的key就是@Alias注解的值
                 .body(JSONUtil.toJsonStr(createOutPaintingTaskRequestDTO));
 
         //处理响应
@@ -58,7 +58,7 @@ public class AliYunAiApi {
             if (createOutPaintingTaskResponse.getCode() != null) {
                 String errorMessage = createOutPaintingTaskResponse.getMessage();
                 log.error("请求异常：{}", errorMessage);
-                throw new BusinessException(ErrorCode.OPERATION_ERROR, "AI扩图失败" + errorMessage);
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "AI扩图失败，" + errorMessage);
             }
             return createOutPaintingTaskResponse;
         }

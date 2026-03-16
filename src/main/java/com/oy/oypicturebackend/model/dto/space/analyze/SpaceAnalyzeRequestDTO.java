@@ -5,7 +5,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
- * 通用的，空间分析请求DTO，用于给每个具体条件的查询请求进行继承
+ * 通用的空间分析请求DTO，用于给每个具体条件的查询请求进行继承
  */
 @Data
 public class SpaceAnalyzeRequestDTO implements Serializable {

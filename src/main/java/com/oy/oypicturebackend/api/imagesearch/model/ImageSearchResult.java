@@ -3,7 +3,7 @@ package com.oy.oypicturebackend.api.imagesearch.model;
 import lombok.Data;
 
 /**
- * 图片搜素结果类，用于接收API的返回结果
+ * 图片搜索结果类（以图搜图），用于接收API的返回结果
  */
 @Data
 public class ImageSearchResult {

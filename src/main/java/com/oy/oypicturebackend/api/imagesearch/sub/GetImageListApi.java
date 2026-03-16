@@ -15,7 +15,7 @@ import java.util.List;
 @Slf4j
 public class GetImageListApi {
     /**
-     * 获取图片列表 （step 3）
+     * 获取具体的相似图片列表数据 （step 3）
      *
      * @param url
      * @return
@@ -52,26 +52,26 @@ public class GetImageListApi {
     private static List<ImageSearchResult> processResponse(String responseBody) {
         //Json字符串转成JsonObject对象
         JSONObject jsonObject = new JSONObject(responseBody);
-        //如果jsonObject没有data字段，抛出异常
+        //校验顶层JSON是否包含"data"字段
         if (!jsonObject.containsKey("data")) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "未获取到图片列");
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "未获取到图片列表");
         }
-        //提取data字段
+        //提取"data"字段对应的JSONObject（因为data是一个嵌套的JSON对象）
         JSONObject data = jsonObject.getJSONObject("data");
-        //判断data是否包含list字段
+        //校验data对象是否包含"list"字段，没有则抛异常
         if (!data.containsKey("list")) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "未获取到图片列表");
         }
-        //提取list字段，得到一个JSON数组
+        //提取"list"字段对应的JSONArray（图片列表的数组数据）
         JSONArray list = data.getJSONArray("list");
-        //使用Hutool的toList方法把JSON数组list转成Java对象列表
+        //使用Hutool的JSONUtil工具类，将JSON数组自动转换为ImageSearchResult类的对象列表（前提：ImageSearchResult类的字段名要和JSON数组中元素的key一一对应）
         return JSONUtil.toList(list, ImageSearchResult.class);
     }
 
 
     //测试上述方法
     public static void main(String[] args) {
-        String url = "https://graph.baidu.com/ajax/pcsimi?carousel=503&entrance=GENERAL&extUiData%5BisLogoShow%5D=1&inspire=general_pc&limit=30&next=2&render_type=card&session_id=3245127942267188312&sign=126473120d8b9e1b954ac01755691510&tk=8232f&tpl_from=pc";
+        String url = "https://graph.baidu.com/ajax/pcsimi?carousel=503&entrance=GENERAL&extUiData%5BisLogoShow%5D=1&inspire=general_pc&limit=30&next=2&render_type=card&session_id=4226792212727440227&sign=126f577d58ea42ce005c301769953981&tk=2eaf2&tpl_from=pc";
         List<ImageSearchResult> imageList = getImageList(url);
         System.out.println("搜索成功：" + imageList);
     }

@@ -1,4 +1,4 @@
-package com.oy.oypicturebackend.exception.utils;
+package com.oy.oypicturebackend.utils;
 
 public class HexColorExpander {
     public static String expandHexColor(String compressed) {

@@ -8,7 +8,7 @@ import lombok.Data;
 @Data
 public class PictureUploadByBatchRequestDTO {
     /**
-     * 搜索词
+     * 抓取的关键词
      */
     private String searchText;
 
@@ -18,7 +18,7 @@ public class PictureUploadByBatchRequestDTO {
     private Integer count = 10;
 
     /**
-     * 图片名称前缀
+     * 批量导入图片时，指定的名称前缀，例如：汽车，则最终图片名称为汽车1 汽车2 汽车3...
      */
     private String namePrefix;
 

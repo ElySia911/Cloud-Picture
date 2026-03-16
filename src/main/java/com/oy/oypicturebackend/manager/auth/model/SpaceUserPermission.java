@@ -6,7 +6,7 @@ import java.io.Serializable;
 
 /**
  * 权限类
- * 定义系统有哪些最小操作权限，比如 查看图片 上传图片 修改图片 删除图片 管理成员
+ * 定义系统有哪些操作权限，比如 查看图片 上传图片 修改图片 删除图片 管理成员
  */
 @Data
 public class SpaceUserPermission implements Serializable {

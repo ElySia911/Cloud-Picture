@@ -5,11 +5,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-@Target(ElementType.METHOD)//意思就是这个自定义注解的生效范围是针对方法的
-@Retention(RetentionPolicy.RUNTIME)//这个注解在程序运行时仍存在
+@Target(ElementType.METHOD)//意思就是该注解只能修饰方法，即只能标注在类的方法上
+@Retention(RetentionPolicy.RUNTIME)//该注解在运行时仍然保留，意味程序可以在运行时通过反射获取该注解信息
 public @interface AuthCheck {
 
-    //自定义注解要接收的参数，用于指定访问被标注方法必须具备的角色，默认值为空，即如果使用注解不指定mustRole，则默认不需要特定角色
+    //自定义注解的属性，后续使用自定义注解时，通过这个属性指定角色，默认是空字符串，使用注解时不指定mustRole，就默认不需要特定角色
     String mustRole() default "";
 
 }

@@ -4,7 +4,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 /**
- * 对空间的图片大小进行分析请求DTO
+ * 对空间的图片大小进行分析的请求
  */
 @EqualsAndHashCode(callSuper = true)
 @Data

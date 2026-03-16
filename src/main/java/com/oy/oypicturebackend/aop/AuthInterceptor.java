@@ -19,7 +19,6 @@ import javax.servlet.http.HttpServletRequest;
 
 @Aspect//声明这是一个切面类
 @Component//spring的bean，让spring来管理
-
 public class AuthInterceptor {
 
     @Resource
@@ -32,13 +31,13 @@ public class AuthInterceptor {
      * @return
      */
     @Around("@annotation(authCheck)")
-//Around表示这个切面在方法执行前后都插入逻辑，切入点表达式是拦截所有被@AuthCheck注解标记的方法，并且能拿到注解本身authCheck对象，用于获取注解参数
-    public Object doInterceptor(ProceedingJoinPoint joinPoint, AuthCheck authCheck) throws Throwable {
+    //@Around("@annotation(authCheck)")：定义一个环绕通知（@Around），切入点是所有被 @AuthCheck 注解标记的方法。这意味着当程序执行被 @AuthCheck 标注的方法时，会先进入该拦截器的逻辑
+    public Object doInterceptor(ProceedingJoinPoint joinPoint, AuthCheck authCheck) throws Throwable { // 参数joinPoint代表被拦截的目标方法，可以通过它执行原方法（joinPoint.proceed()）。参数AuthCheck authCheck：自动注入目标方法上的@AuthCheck注解实例，用于获取注解中配置的mustRole属性值
         String mustRole = authCheck.mustRole();
 
-        //因为AOP不在controller中，所有不能直接@RequestParam或@RequestBody拿请求，所以通过RequestContextHolder（可以理解成请求上下文）获取当前线程绑定的请求对象
+        //因为@Around注解的方法，参数只能是切入点和注解实例，不能随意添加HttpServletRequest，所以通过请求上下文工具类（RequestContextHolder）取出当前请求对应的上下文属性（RequestAttribute）
         RequestAttributes requestAttributes = RequestContextHolder.currentRequestAttributes();
-        HttpServletRequest request = ((ServletRequestAttributes) requestAttributes).getRequest();//这样就拿到了HttpServletRequest
+        HttpServletRequest request = ((ServletRequestAttributes) requestAttributes).getRequest();//转换类型后，通过getRequest拿到HttpServletRequest
 
         //获取当前登录用户，getLoginUser方法里面进行了是否登录的校验，所以这个自定义注解不仅能校验角色，还能校验是否登录
         User loginUser = userService.getLoginUser(request);

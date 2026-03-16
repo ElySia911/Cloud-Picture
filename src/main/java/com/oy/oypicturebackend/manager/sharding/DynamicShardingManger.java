@@ -25,7 +25,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 分表管理器
+ * 分表管理器，负责创建物理分表，动态维护ShardingSphere 的分表节点配置，确保算法有可路由的目标表，为PictureShardingAlgorithm提供服务
  */
 /*@Component*/ //关闭分库分表
 @Slf4j
@@ -59,6 +59,7 @@ public class DynamicShardingManger {
                 .collect(Collectors.toSet());//将流中每个id值收集到一个Set集合中
 
 
+        //将集合中每一个spaceId都转换成对应的分表名，并收集成一个新的集合
         Set<String> tableNames = spaceIds.stream()
                 .map(spaceId -> LOGIC_TABLE_NAME + "_" + spaceId)
                 .collect(Collectors.toSet());
@@ -69,43 +70,44 @@ public class DynamicShardingManger {
 
     /**
      * 更新ShardingSphere 的 actual-data-nodes 动态表名配置
+     * （把写死的 oy_picture.picture 替换为 oy_picture.picture,oy_picture.picture_10001,...）
      */
     private void updateShardingTableNodes() {
-        Set<String> tableNames = fetchAllPictureTableNames();// ["picture", "picture_10001", "picture_10002"]
+        Set<String> tableNames = fetchAllPictureTableNames();// ["picture","picture_10001","picture_10002"]
 
-        //用stream遍历每个表名，通过map给每个表名前加上数据库名"oy_picture."，然后使用collect方法将流中的每个表名收集到一个字符串列表中，最后用join方法将列表中的表名用逗号连接起来
+        //用stream遍历每个表名，通过map给每个表名前加上数据库名"oy_picture."，然后使用collect方法将流中新拼接好的表名收集到一个字符串列表中，最后用join方法将列表中的表名用逗号连接起来
         String newActualDataNodes = tableNames.stream()
                 .map(tableName -> "oy_picture." + tableName)
                 .collect(Collectors.joining(","));// oy_picture.picture,oy_picture.picture_10001,oy_picture.picture_10002
 
         log.info("动态分表 actual-data-nodes 配置：{}", newActualDataNodes);
 
-        ContextManager contextManager = getContextManager();//拿到框架的上下文管理器，这个是框架中保存配置 规则 数据源等元信息的核心管理类
+        ContextManager contextManager = getContextManager();//拿到框架的上下文管理器
 //---------
-        //拿到某个具体数据库的所有规则配置
+        //从框架的上下文管理器拿到某个具体数据库的规则集合，集合中包含了所有类型的规则（分片，加密等）
         ShardingSphereRuleMetaData ruleMetaData = contextManager.getMetaDataContexts()
                 .getMetaData()//获取所有数据库元数据
                 .getDatabases()//获取所有数据库配置
                 .get(DATABASE_NAME)//获取指定的数据库
                 .getRuleMetaData();//获取该数据库的所有规则元数据
 
-        //从规则元数据中尝试获取分库分表的规则   ShardingRule.class表示分库分表规则类 如（picture、user等）
+        //从 RuleMetaData 存储的所有规则集合中，筛选出类型为 ShardingRule（分片规则） 的规则，且该方法要求集合中这类规则只能有一个，找到则返回封装后的 Optional
         Optional<ShardingRule> shardingRule = ruleMetaData.findSingleRule(ShardingRule.class);
 //----------
-        //判断是否找到分库分表规则
+        //判断是否找到分片规则，初始状态下，isPresent返回true，yml配置了分片规则
         if (shardingRule.isPresent()) {
 
-            //shardingRule.get()：取出Optional中包装的分库分表规则对象，getConfiguration（）获取该分库分表规则的配置详情，强转为ShardingRuleConfiguration类型（分库分表的配置类）
-            ShardingRuleConfiguration ruleConfig =
-                    (ShardingRuleConfiguration) shardingRule.get().getConfiguration();
+            //get方法取出分片规则的实例，但这个实例是只读的，通过getConfiguration方法和强转得到可编辑的实例， 这个实例是一个容器，存储了每张数据表如何分片的规则
+            // 初始状态下，ruleConfig仅包含yml中配置的picture表对应的分片规则（无其他表的分片配置），且actualDataNodes为oy_picture.picture
+            ShardingRuleConfiguration ruleConfig = (ShardingRuleConfiguration) shardingRule.get().getConfiguration();
 
-            //getTables()获取当前所有逻辑表的分片规则，用列表存起来,用stream和map逐个遍历每一个逻辑表的配置，可能是picture user space等不同表
+            //getTables() 读取容器中每一条数据，每条数据代表一张数据表的分片规则，以流式方式处理每张表的分片配置（如picture、user、space等）
             List<ShardingTableRuleConfiguration> updatedRules = ruleConfig.getTables()
                     .stream()
                     .map(oldTableRule -> {
-                        //如果某一条规则的逻辑表名是picture
+                        //如果某一条规则的逻辑表名等于指定的 LOGIC_TABLE_NAME
                         if (LOGIC_TABLE_NAME.equals(oldTableRule.getLogicTable())) {
-                            //创建新的规则对象newTableRuleConfig，传入逻辑表名以及拼接好的分表列表
+                            //新建一个分片规则对象，第一个参数是逻辑表名，第二个参数是更新后的物理表列表
                             ShardingTableRuleConfiguration newTableRuleConfig = new ShardingTableRuleConfiguration(LOGIC_TABLE_NAME, newActualDataNodes);
 
                             //将旧规则中的分库分表策略、主键生成策略、审计策略等配置复制到新规则中
@@ -119,7 +121,7 @@ public class DynamicShardingManger {
                     })
                     .collect(Collectors.toList());//把处理后的所有表的规则收集成一个新的列表updatedRules
 
-            ruleConfig.setTables(updatedRules);//将处理好的新表规则列表替换掉原来的表规则列表
+            ruleConfig.setTables(updatedRules);//将处理后的分片规则列表回写到容器，覆盖原本的分片规则列表
             //把更新后的规则配置正式提交给 ShardingSphere 框架
             contextManager.alterRuleConfiguration(DATABASE_NAME, Collections.singleton(ruleConfig));
             contextManager.reloadDatabase(DATABASE_NAME);//让框架重新加载指定数据库的配置
@@ -143,7 +145,7 @@ public class DynamicShardingManger {
             Long spaceId = space.getId();
             String tableName = LOGIC_TABLE_NAME + "_" + spaceId;//拼接表名 例picture_1001
 
-            //创建新表
+            //编写创建新表的sql
             String createTableSql = "CREATE TABLE " + tableName + " LIKE picture"; //复制picture表的结构来创建新的表，但不复制数据
             try {
                 SqlRunner.db().update(createTableSql);//调用工具类SqlRunner执行建表Sql
@@ -159,12 +161,12 @@ public class DynamicShardingManger {
 
 
     /**
-     * 获取ShardingSphere的上下文管理器（ContextManager）
+     * 获取ShardingSphere的上下文管理器（ContextManager），它保存了分片规则、数据源配置、表元数据等所有运行时核心配置信息
      *
      * @return
      */
     private ContextManager getContextManager() {
-        //从数据源获取数据库连接，将获取到的连接强制转换为ShardingSphere 框架的 ShardingSphereConnection 类型（用于适配分库分表功能）。
+        //从数据源获取数据库连接，将获取到的连接拆包为 ShardingSphere 框架的 ShardingSphereConnection 类型。（ShardingSphereConnection实现了Connection）
         try (ShardingSphereConnection connection = dataSource.getConnection().unwrap(ShardingSphereConnection.class)) {
             return connection.getContextManager();//获取ShardingSphere的上下文管理器，并作为方法返回值返回
         } catch (SQLException e) {
